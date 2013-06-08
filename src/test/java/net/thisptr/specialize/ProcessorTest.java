@@ -7,7 +7,6 @@ import net.thisptr.specialize.annotation.Specializes;
 
 import org.junit.Test;
 
-
 public class ProcessorTest {
 	
 	@Specializes({
@@ -45,12 +44,19 @@ public class ProcessorTest {
 		}
 	}
 	
+	@InjectPrimitive(key = "T", type = int.class)
+	public static class IntIntPair extends Pair<T, T> {
+		public IntIntPair(final T first, final T second) {
+			super(first, second);
+		}
+	}
+	
 	@InjectPrimitives({
 		@InjectPrimitive(key = "T", type = int.class),
-		@InjectPrimitive(key = "U", type = int.class)
+		@InjectPrimitive(key = "U", type = double.class)
 	})
-	public static class IntIntPair extends Pair<T, U> {
-		public IntIntPair(final T first, final U second) {
+	public static class IntDoublePair extends Pair<T, U> {
+		public IntDoublePair(final T first, final U second) {
 			super(first, second);
 		}
 	}
@@ -74,7 +80,7 @@ public class ProcessorTest {
 
 	@Specialize(type = {int.class, float.class}, key = "T", generic = false)
 	@InjectPrimitive(type = int.class, key = "U")
-	public static <T, U> T someProcess(final AtomicValue<T> i, final AtomicValue<U> p) {
+	public static <T> T someProcess(final AtomicValue<T> i, final AtomicValue<U> p) {
 		return i.getValue() + p.getValue();
 	}
 

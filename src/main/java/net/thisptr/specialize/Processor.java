@@ -51,6 +51,9 @@ import com.sun.tools.javac.util.Context;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Names;
 
+// TODO: 型パラメータに含まれるものを特殊化するときはspecialize,
+// それ以外のところを埋めるだけなのはinjectのバリデーション
+
 // @SupportedSourceVersion(SourceVersion.RELEASE_6)
 @SupportedAnnotationTypes("*")
 public class Processor extends AbstractProcessor {
