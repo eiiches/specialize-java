@@ -2,6 +2,7 @@ package net.thisptr.specialize;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -182,6 +183,9 @@ public class Processor extends AbstractProcessor {
 			
 			specialized.name = names.fromString(specializedName.toString());
 			specialized.typarams = genericArguments;
+			
+			// FIXME: this should be done only if original class is a top level class.
+			specialized.mods.flags |= Modifier.STATIC;
 			
 			// some clean up
 			Utils.removeAnnotation(specialized, Specialize.class);
@@ -380,6 +384,54 @@ public class Processor extends AbstractProcessor {
 		
 		return specializations;
 	}
+	
+	public Map<String, InjectPrimitiveInfo> readAllInjectPrimitiveInfo(final JCTree tree) {
+		final JCAnnotation injectPrimitiveExpr = Utils.getAnnotation(tree, InjectPrimitive.class);
+		final JCAnnotation injectPrimitivesExpr = Utils.getAnnotation(tree, InjectPrimitives.class);
+
+		if (injectPrimitiveExpr == null && injectPrimitivesExpr == null)
+			return null;
+
+		final Map<String, InjectPrimitiveInfo> injections = new HashMap<String, InjectPrimitiveInfo>();
+
+		if (injectPrimitiveExpr != null) {
+			final EvaluateUtils.AnnotationInfo injectPrimitive = EvaluateUtils.evaluateAnnotation((JCAnnotation) injectPrimitiveExpr);
+			log.debug("Found annotation: {}", injectPrimitive);
+
+			final InjectPrimitiveInfo injection = readInjectPrimitiveInfo(injectPrimitive);
+			if (injection == null) {
+				return null; // TODO: report error
+			}
+			injections.put(injection.key, injection);
+		}
+
+		if (injectPrimitivesExpr != null) {
+			EvaluateUtils.AnnotationInfo injectPrimitives = EvaluateUtils.evaluateAnnotation((JCAnnotation) injectPrimitivesExpr);
+			log.debug("Found annotation: {}", injectPrimitives);
+
+			final EvaluateUtils.AnnotationInfo.Value valueObject = injectPrimitives.values.get("value");
+			if (valueObject == null || valueObject.value == null || !(valueObject.value instanceof ArrayList)) {
+				log.error("No valid 'value' attribute found: {}", valueObject);
+				return null; // TODO: report error
+			}
+
+			for (final Object injectPrimitiveObject : (ArrayList<?>) valueObject.value) {
+				if (!(injectPrimitiveObject instanceof EvaluateUtils.AnnotationInfo)) {
+					log.error("Invalid type element for @InjectPrimitives.value(): {}", valueObject);
+					return null; // TODO: report error
+				}
+
+				final EvaluateUtils.AnnotationInfo injectPrimitive = (EvaluateUtils.AnnotationInfo) injectPrimitiveObject;
+				final InjectPrimitiveInfo injection = readInjectPrimitiveInfo(injectPrimitive);
+				if (injection == null) {
+					return null; // TODO: report error
+				}
+				injections.put(injection.key, injection);
+			}
+		}
+
+		return injections;
+	}
 
 	@Override
 	public boolean process(final Set<? extends TypeElement> annotations, final RoundEnvironment roundEnv) {
@@ -444,59 +496,31 @@ public class Processor extends AbstractProcessor {
 					result = specializeClassDef(context, tree, specializations);
 				}
 			});
-
-			// InjectPrimitive
+			
+			// InjectPrimitive on methods
 			unit.accept(new TreeTranslator() {
 				@Override
-				public void visitClassDef(JCClassDecl tree) {
-					final JCAnnotation injectPrimitiveExpr = Utils.getAnnotation(tree, InjectPrimitive.class);
-					final JCAnnotation injectPrimitivesExpr = Utils.getAnnotation(tree, InjectPrimitives.class);
-					
-					if (injectPrimitiveExpr == null && injectPrimitivesExpr == null) {
-						super.visitClassDef(tree);
+				public void visitMethodDef(JCMethodDecl tree) {
+					final Map<String, InjectPrimitiveInfo> injections = readAllInjectPrimitiveInfo(tree);
+					if (injections == null) {
+						super.visitMethodDef(tree);
 						return;
 					}
 					
-					final Map<String, InjectPrimitiveInfo> injections = new HashMap<String, InjectPrimitiveInfo>();
-					
-					if (injectPrimitiveExpr != null) {
-						final EvaluateUtils.AnnotationInfo injectPrimitive = EvaluateUtils.evaluateAnnotation((JCAnnotation) injectPrimitiveExpr);
-						log.debug("Found annotation: {}", injectPrimitive);
-						
-						final InjectPrimitiveInfo injection = readInjectPrimitiveInfo(injectPrimitive);
-						if (injection == null) {
-							super.visitClassDef(tree);
-							return; // TODO: report error
-						}
-						injections.put(injection.key, injection);
-					}
+					result = injectPrimitive(context, tree, injections);
+					log.info("Inject {} on {}.", injections.values(), tree.name);
+				}
+			});
+			
 
-					if (injectPrimitivesExpr != null) {
-						EvaluateUtils.AnnotationInfo injectPrimitives = EvaluateUtils.evaluateAnnotation((JCAnnotation) injectPrimitivesExpr);
-						log.debug("Found annotation: {}", injectPrimitives);
-						
-						final EvaluateUtils.AnnotationInfo.Value valueObject = injectPrimitives.values.get("value");
-						if (valueObject == null || valueObject.value == null || !(valueObject.value instanceof ArrayList)) {
-							log.error("No valid 'value' attribute found: {}", valueObject);
-							super.visitClassDef(tree);
-							return; // TODO: report error
-						}
-						
-						for (final Object injectPrimitiveObject : (ArrayList<?>) valueObject.value) {
-							if (!(injectPrimitiveObject instanceof EvaluateUtils.AnnotationInfo)) {
-								log.error("Invalid type element for @InjectPrimitives.value(): {}", valueObject);
-								super.visitClassDef(tree);
-								return; // TODO: report error
-							}
-							
-							final EvaluateUtils.AnnotationInfo injectPrimitive = (EvaluateUtils.AnnotationInfo) injectPrimitiveObject;
-							final InjectPrimitiveInfo injection = readInjectPrimitiveInfo(injectPrimitive);
-							if (injection == null) {
-								super.visitClassDef(tree);
-								return; // TODO: report error
-							}
-							injections.put(injection.key, injection);
-						}
+			// InjectPrimitive on classes
+			unit.accept(new TreeTranslator() {
+				@Override
+				public void visitClassDef(JCClassDecl tree) {
+					final Map<String, InjectPrimitiveInfo> injections = readAllInjectPrimitiveInfo(tree);
+					if (injections == null) {
+						super.visitClassDef(tree);
+						return;
 					}
 					
 					result = injectPrimitive(context, tree, injections);

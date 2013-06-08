@@ -72,9 +72,10 @@ public class ProcessorTest {
 		}
 	}
 
-	@Specialize(type = {int.class, float.class}, key = "T")
-	public static <T> T someProcess(final AtomicValue<T> i) {
-		return i.getValue();
+	@Specialize(type = {int.class, float.class}, key = "T", generic = false)
+	@InjectPrimitive(type = int.class, key = "U")
+	public static <T, U> T someProcess(final AtomicValue<T> i, final AtomicValue<U> p) {
+		return i.getValue() + p.getValue();
 	}
 
 	@Specialize(key = "T", type = {int.class, float.class}, generic = false)
@@ -101,6 +102,6 @@ public class ProcessorTest {
 		final double bScore = b.score;
 		System.out.println(bScore);
 
-		final int value2 = someProcess(hoge);
+		final int value2 = someProcess(hoge, hoge);
 	}
 }
