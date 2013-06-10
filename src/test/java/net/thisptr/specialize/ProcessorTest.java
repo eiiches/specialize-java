@@ -1,113 +1,77 @@
 package net.thisptr.specialize;
 
-import net.thisptr.specialize.annotation.InjectPrimitive;
-import net.thisptr.specialize.annotation.InjectPrimitives;
-import net.thisptr.specialize.annotation.Specialize;
-import net.thisptr.specialize.annotation.Specializes;
+import static org.junit.Assert.assertTrue;
 
-import org.junit.Test;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.nio.charset.Charset;
+import java.util.Arrays;
+import java.util.Locale;
 
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticListener;
+import javax.tools.JavaCompiler;
+import javax.tools.JavaCompiler.CompilationTask;
+import javax.tools.JavaFileObject;
+import javax.tools.JavaFileObject.Kind;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.StandardLocation;
+import javax.tools.ToolProvider;
+
+import org.eclipse.jdt.internal.compiler.tool.EclipseCompiler;
+import org.junit.experimental.theories.DataPoint;
+import org.junit.experimental.theories.DataPoints;
+import org.junit.experimental.theories.Theories;
+import org.junit.experimental.theories.Theory;
+import org.junit.runner.RunWith;
+
+
+@RunWith(Theories.class)
 public class ProcessorTest {
 	
-	@Specializes({
-		@Specialize(type = {int.class, double.class}, key = "T"),
-		@Specialize(type = {int.class, double.class}, key = "U")
-	})
-	public static class Pair<T, U> {
-		public final T first;
-		public final U second;
+	@DataPoint
+	public static JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
+
+	// @DataPoint
+	public static JavaCompiler eclipse = new EclipseCompiler();
+
+	@DataPoints
+	public static String[] classNames = new String[] {
+		"net.thisptr.specialize.example.Example",
+	};
+
+	@Theory
+	public void testCompile(final JavaCompiler compiler, final String className) throws IOException {
+		final Locale locale = Locale.getDefault();
+		final Charset charset = Charset.defaultCharset();
 		
-		public Pair(final T first, final U second) {
-			this.first = first;
-			this.second = second;
-		}
-	}
-	
-	@Specializes({
-		@Specialize(type = {int.class, float.class}, key = "Item"),
-		@Specialize(type = {int.class, double.class}, key = "Score", generic = false)
-	})
-	public static class BasicScoredItem<Item, Score> {
-		public final Item item;
-		public final Score score;
+		final DiagnosticListener<JavaFileObject> diagnosticListener = new DiagnosticListener<JavaFileObject>() {
+			@Override
+			public void report(Diagnostic<? extends JavaFileObject> diagnostic) {
+			}
+		};
 		
-		public BasicScoredItem(final Item item, final Score score) {
-			this.item = item;
-			this.score = score;
-		}
-	}
-
-	@InjectPrimitive(key = "T", type = double.class)
-	public static class ScoredItem<Item> extends BasicScoredItem<Item, T> {
-		public ScoredItem(final Item item, final T score) {
-			super(item, score);
-		}
-	}
-	
-	@InjectPrimitive(key = "T", type = int.class)
-	public static class IntIntPair extends Pair<T, T> {
-		public IntIntPair(final T first, final T second) {
-			super(first, second);
-		}
-	}
-	
-	@InjectPrimitives({
-		@InjectPrimitive(key = "T", type = int.class),
-		@InjectPrimitive(key = "U", type = double.class)
-	})
-	public static class IntDoublePair extends Pair<T, U> {
-		public IntDoublePair(final T first, final U second) {
-			super(first, second);
-		}
-	}
-	
-	@Specialize(type = {int.class, float.class}, key = "T")
-	public static class AtomicValue<T> {
-		private T value;
+		final StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnosticListener, locale, charset);
+		fileManager.setLocation(StandardLocation.SOURCE_PATH, Arrays.asList(new File("src/test/java")));
+		fileManager.setLocation(StandardLocation.CLASS_OUTPUT, Arrays.asList(new File("target/test-classes")));
+		final JavaFileObject sourceFile = fileManager.getJavaFileForInput(StandardLocation.SOURCE_PATH, className, Kind.SOURCE);
 		
-		public AtomicValue(final T value) {
-			this.value = value;
+		final ByteArrayOutputStream bos = new ByteArrayOutputStream();
+		final Writer writer = new OutputStreamWriter(bos);
+		try {
+			final CompilationTask task = compiler.getTask(writer, fileManager, diagnosticListener, Arrays.<String>asList(), null, Arrays.asList(sourceFile));
+			task.setProcessors(Arrays.asList(new Processor()));
+
+			final boolean success = task.call();
+			assertTrue(success);
+		} finally {
+			try {
+				writer.close();
+			} catch (IOException e) {}
+			System.out.println(bos.toString());
 		}
-		
-		public synchronized T getValue() {
-			return value;
-		}
-		
-		public synchronized void setValue(final T value) {
-			this.value = value;
-		}
-	}
-
-	@Specialize(type = {int.class, float.class}, key = "T", generic = false)
-	@InjectPrimitive(type = int.class, key = "U")
-	public static <T> T someProcess(final AtomicValue<T> i, final AtomicValue<U> p) {
-		return i.getValue() + p.getValue();
-	}
-
-	@Specialize(key = "T", type = {int.class, float.class}, generic = false)
-	public static <T> T sum(final T[] values) {
-		T result = 0;
-		for (final T value : values)
-			result += value;
-		return result;
-	}
-
-	@Test
-	public void main() {
-		AtomicValue<int> hoge =  new AtomicValue<int>(10);
-		hoge = new AtomicValue<int>(20);
-		hoge.setValue(20);
-		final int value = hoge.getValue();
-		System.out.println(value);
-
-		final BasicScoredItem<String, double> a = new BasicScoredItem<String, double>("hoge", 2.0);
-		final double aScore = a.score;
-		System.out.println(aScore);
-
-		final ScoredItem<String> b = new ScoredItem<String>("hoge", 2.0);
-		final double bScore = b.score;
-		System.out.println(bScore);
-
-		final int value2 = someProcess(hoge, hoge);
 	}
 }
