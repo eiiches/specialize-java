@@ -4,10 +4,10 @@
       <pattern>[%level] %logger{24}: %msg%n</pattern>
     </encoder>
   </appender>
-  
+
   <root level="INFO">
     <appender-ref ref="CONSOLE" />
   </root>
-  
+
   <logger name="net.thisptr.specialize" level="INFO" />
 </configuration>

@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 
 public class AnnotationUtils {
 	private AnnotationUtils() { }
-	
+
 	private static Logger log = LoggerFactory.getLogger(AnnotationUtils.class);
 
 	public static <A extends Annotation> Set<String> getMembers(final Class<A> annotationClass) {
@@ -19,7 +19,7 @@ public class AnnotationUtils {
 			result.add(annotationMethod.getName());
 		return result;
 	}
-	
+
 	public static Object getDefaultValue(final Class<? extends Annotation> annotationClass, final String name) {
 		try {
 			return annotationClass.getMethod(name).getDefaultValue();

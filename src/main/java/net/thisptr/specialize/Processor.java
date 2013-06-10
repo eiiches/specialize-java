@@ -58,10 +58,10 @@ import com.sun.tools.javac.util.Names;
 @SupportedAnnotationTypes("*")
 public class Processor extends AbstractProcessor {
 	private static Logger log = LoggerFactory.getLogger(Processor.class);
-	
+
 	private static Type toType(final Context context, final Class<?> clazz) {
 		final Symtab symtab = Symtab.instance(context);
-		
+
 		if (clazz == int.class) return  symtab.intType;
 		if (clazz == double.class) return  symtab.doubleType;
 		if (clazz == float.class) return  symtab.floatType;
@@ -70,14 +70,14 @@ public class Processor extends AbstractProcessor {
 		if (clazz == byte.class) return  symtab.byteType;
 		if (clazz == boolean.class) return  symtab.booleanType;
 		if (clazz == long.class) return  symtab.longType;
-		
+
 		log.error("Unhandled class type: {}", clazz);
 		return null;
 	}
-	
+
 	private static <T extends JCTree> T injectPrimitive(final Context context, final T tree, final Map<String, InjectPrimitiveInfo> injections) {
 		final TreeMaker treeMaker = TreeMaker.instance(context);
-		
+
 		tree.accept(new TreeTranslator() {
 			@Override
 			public void visitIdent(final JCIdent tree) {
@@ -85,26 +85,26 @@ public class Processor extends AbstractProcessor {
 					super.visitIdent(tree);
 					return;
 				}
-				
+
 				final InjectPrimitiveInfo info = injections.get(tree.toString());
 				result = treeMaker.Type(toType(context, info.type));
 			}
 		});
-		
+
 		return tree;
 	}
-	
+
 	private static void eachSpecialization(final java.util.List<Map<String, InjectPrimitiveInfo>> results, final java.util.List<SpecializeInfo> specialization, final Stack<InjectPrimitiveInfo> injections) {
 		if (specialization.isEmpty()) {
 			if (injections.isEmpty()) // all generic version
 				return;
-			
+
 			final Map<String, InjectPrimitiveInfo> result = new HashMap<String, InjectPrimitiveInfo>();
 			for (final InjectPrimitiveInfo injection : injections) {
 				result.put(injection.key, injection);
 			}
 			results.add(result);
-			
+
 			log.info("  + {}", injections);
 		} else {
 			final SpecializeInfo head = specialization.get(0);
@@ -114,28 +114,28 @@ public class Processor extends AbstractProcessor {
 				eachSpecialization(results, specialization.subList(1, specialization.size()), injections);
 				injections.pop();
 			}
-			
+
 			if (head.generic)
 				eachSpecialization(results, specialization.subList(1, specialization.size()), injections);
 		}
 	}
-	
+
 	private static java.util.List<Map<String, InjectPrimitiveInfo>> eachSpecialization(final Collection<SpecializeInfo> specializations) {
 		final java.util.List<Map<String, InjectPrimitiveInfo>> results = new ArrayList<Map<String, InjectPrimitiveInfo>>();
 		eachSpecialization(results, new ArrayList<SpecializeInfo>(specializations), new Stack<InjectPrimitiveInfo>());
 		return results;
 	}
-	
+
 	private static List<JCTree> specializeMethodDef(final Context context, final JCMethodDecl methodDecl, final Map<String, SpecializeInfo> specializations) {
 		List<JCTree> specializedMethods = List.nil();
-		
+
 		boolean hasGeneric = false;
 		for (final SpecializeInfo info : specializations.values())
 			hasGeneric |= info.generic;
-		
+
 		for (final Map<String, InjectPrimitiveInfo> injections : eachSpecialization(specializations.values())) {
 			final JCMethodDecl specialized = injectPrimitive(context, Utils.copyTree(context, methodDecl), injections);
-			
+
 			// modify type parameters
 			List<JCTypeParameter> genericArguments = List.nil();
 			for (final JCTypeParameter typaram : methodDecl.typarams) {
@@ -144,32 +144,32 @@ public class Processor extends AbstractProcessor {
 				genericArguments = genericArguments.append(typaram);
 			}
 			specialized.typarams = genericArguments;
-			
+
 			// some clean up
 			Utils.removeAnnotation(specialized, Specialize.class);
 			Utils.removeAnnotation(specialized, Specializes.class);
-			
+
 			specializedMethods = specializedMethods.append(specialized);
 		}
-		
+
 		if (hasGeneric)
 			specializedMethods = specializedMethods.append(methodDecl);
-		
+
 		return specializedMethods;
 	}
-	
+
 	private static JCClassDecl specializeClassDef(final Context context, final JCClassDecl classDecl, final Map<String, SpecializeInfo> specializations) {
 		final Names names = Names.instance(context);
-		
+
 		boolean hasGeneric = false;
 		for (final SpecializeInfo info : specializations.values())
 			hasGeneric |= info.generic;
-		
+
 		List<JCTree> specializedClasses = List.nil();
-		
+
 		for (final Map<String, InjectPrimitiveInfo> injections : eachSpecialization(specializations.values())) {
 			final JCClassDecl specialized = injectPrimitive(context, Utils.copyTree(context, classDecl), injections);
-			
+
 			// modify class name and parameter
 			final StringBuilder specializedName = new StringBuilder("$specialized");
 			List<JCTypeParameter> genericArguments = List.nil();
@@ -183,36 +183,36 @@ public class Processor extends AbstractProcessor {
 					specializedName.append("$_");
 				}
 			}
-			
+
 			specialized.name = names.fromString(specializedName.toString());
 			specialized.typarams = genericArguments;
-			
+
 			// FIXME: this should be done only if original class is a top level class.
 			specialized.mods.flags |= Modifier.STATIC;
-			
+
 			// some clean up
 			Utils.removeAnnotation(specialized, Specialize.class);
 			Utils.removeAnnotation(specialized, Specializes.class);
-			
+
 			specializedClasses = specializedClasses.append(specialized);
 		}
-		
+
 		if (!hasGeneric)
 			classDecl.defs = List.nil();
-		
+
 		classDecl.defs = classDecl.defs.appendList(specializedClasses);
-		
+
 		return classDecl;
 	}
-	
+
 	private static JCExpression specializeTypeApply(final Context context, final JCTypeApply typeApply) {
 		final TreeMaker treeMaker = TreeMaker.instance(context);
 		final Names names = Names.instance(context);
-		
+
 		final StringBuilder specializedName = new StringBuilder("$specialized");
 		List<JCExpression> genericArguments = List.<JCExpression>nil();
 		List<JCExpression> primitiveArguments = List.<JCExpression>nil();
-		
+
 		for (final JCExpression argument : typeApply.arguments) {
 			if (argument instanceof JCPrimitiveTypeTree) {
 				primitiveArguments = primitiveArguments.append(argument);
@@ -225,9 +225,9 @@ public class Processor extends AbstractProcessor {
 
 		if (primitiveArguments.isEmpty())
 			return typeApply;
-		
+
 		final JCExpression specializedClass = treeMaker.Select(typeApply.clazz, names.fromString(specializedName.toString()));
-		
+
 		if (genericArguments.isEmpty()) {
 			// fully specialized
 			return specializedClass;
@@ -237,13 +237,13 @@ public class Processor extends AbstractProcessor {
 			return result;
 		}
 	}
-	
+
 	private static InjectPrimitiveInfo readInjectPrimitiveInfo(final EvaluateUtils.AnnotationInfo injectPrimitive) {
 		if (injectPrimitive.annotationClassName == null || !injectPrimitive.annotationClassName.endsWith(InjectPrimitive.class.getSimpleName())) {
 			log.error("Unsupported annotation: {}, expecting {}", injectPrimitive, InjectPrimitive.class.getSimpleName());
 			return null; // TODO: report error
 		}
-					
+
 		final EvaluateUtils.AnnotationInfo.Value keyObject = injectPrimitive.values.get("key");
 		if (keyObject == null || keyObject.value == null || !(keyObject.value instanceof String)) {
 			log.error("No valid 'key' attribute found: {}", keyObject);
@@ -255,19 +255,19 @@ public class Processor extends AbstractProcessor {
 			log.error("No valid 'type' attribute found: {}", typeObject);
 			return null; // TODO: report error
 		}
-		
+
 		final String key = (String) keyObject.value;
 		final Class<?> type = (Class<?>) typeObject.value;
-		
+
 		return new InjectPrimitiveInfo(key, type);
 	}
-	
+
 	private static SpecializeInfo readSpecializeInfo(final EvaluateUtils.AnnotationInfo specialize) {
 		if (specialize.annotationClassName == null || !specialize.annotationClassName.endsWith(Specialize.class.getSimpleName())) {
 			log.error("Unsupported annotation: {}, expecting {}", specialize, Specialize.class.getSimpleName());
 			return null; // TODO: report error
 		}
-		
+
 		final EvaluateUtils.AnnotationInfo.Value keyObject = specialize.values.get("key");
 		if (keyObject == null || keyObject.value == null || !(keyObject.value instanceof String)) {
 			log.error("No valid 'key' attribute found: {}", keyObject);
@@ -279,18 +279,18 @@ public class Processor extends AbstractProcessor {
 			log.error("No valid 'type' attribute found: {}", typeObject);
 			return null; // TODO: report error
 		}
-		
+
 		final EvaluateUtils.AnnotationInfo.Value genericObject = specialize.values.get("generic");
 		if (genericObject != null && (genericObject.value == null || !(genericObject.value instanceof Integer))) {
 			log.error("Invalid 'generic' attribute: {}", genericObject);
 			return null; // TODO: report error
 		}
-		
+
 		final String key = (String) keyObject.value;
 		final Boolean generic = genericObject != null
 				? ((int) genericObject.value != 0)
 				: (Boolean) AnnotationUtils.getDefaultValue(Specialize.class, "generic");
-		
+
 		final ArrayList<Class<?>> types = new ArrayList<Class<?>>();
 		if (typeObject.value instanceof ArrayList) {
 			for (final Object type : (ArrayList<?>) typeObject.value) {
@@ -304,15 +304,15 @@ public class Processor extends AbstractProcessor {
 		if (typeObject.value instanceof Class) {
 			types.add((Class<?>) typeObject.value);
 		}
-		
+
 		return new SpecializeInfo(key, types, generic);
 	}
-	
+
 	private static class SpecializeInfo {
 		public final String key;
 		public final ArrayList<Class<?>> types;
 		public final boolean generic;
-		
+
 		public SpecializeInfo(final String key, final ArrayList<Class<?>> types, final boolean generic) {
 			this.key = key;
 			this.types = new ArrayList<Class<?>>(types);
@@ -339,7 +339,7 @@ public class Processor extends AbstractProcessor {
 			return String.format("{key: \"%s\", type: %s}", key, type);
 		}
 	}
-	
+
 	private Map<String, SpecializeInfo> readAllSpecializedInfo(final JCTree tree) {
 		final JCAnnotation specializeExpr = Utils.getAnnotation(tree, Specialize.class);
 		final JCAnnotation specializesExpr = Utils.getAnnotation(tree, Specializes.class);
@@ -356,7 +356,7 @@ public class Processor extends AbstractProcessor {
 			final SpecializeInfo specialization = readSpecializeInfo(specialize);
 			if (specialization == null)
 				return null; // TODO: report error
-			
+
 			specializations.put(specialization.key, specialization);
 		}
 
@@ -380,14 +380,14 @@ public class Processor extends AbstractProcessor {
 				final SpecializeInfo specialization = readSpecializeInfo(specialize);
 				if (specialization == null)
 					return null; // TODO: report error
-				
+
 				specializations.put(specialization.key, specialization);
 			}
 		}
-		
+
 		return specializations;
 	}
-	
+
 	public Map<String, InjectPrimitiveInfo> readAllInjectPrimitiveInfo(final JCTree tree) {
 		final JCAnnotation injectPrimitiveExpr = Utils.getAnnotation(tree, InjectPrimitive.class);
 		final JCAnnotation injectPrimitivesExpr = Utils.getAnnotation(tree, InjectPrimitives.class);
@@ -443,48 +443,48 @@ public class Processor extends AbstractProcessor {
 		final JavacProcessingEnvironment javacProcessingEnv = (JavacProcessingEnvironment) processingEnv;
 		final Trees trees = Trees.instance(processingEnv);
 		final Context context = javacProcessingEnv.getContext();
-		
+
 //		for (final Element element : roundEnv.getElementsAnnotatedWith(Specialize.class)) {
 //			Specialize annotation = element.getAnnotation(Specialize.class);
 //			log.info("annotation: {}", annotation);
 //		}
-		
+
 		for (final Element rootElement : roundEnv.getRootElements()) {
 			final JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(rootElement).getCompilationUnit();
-			
+
 			// ignore other than sources
 			if (unit.getSourceFile().getKind() != JavaFileObject.Kind.SOURCE)
 				continue;
-			
+
 			// Specialize functions
 			unit.accept(new TreeTranslator() {
 				@Override
 				public void visitClassDef(final JCClassDecl tree) {
 					List<JCTree> defs = List.nil();
-					
+
 					for (final JCTree member : tree.defs) {
 						if (!(member instanceof JCMethodDecl)) {
 							defs = defs.append(member);
 							continue;
 						}
-						
+
 						final JCMethodDecl methodDecl = (JCMethodDecl) member;
-						
+
 						final Map<String, SpecializeInfo> specializations = readAllSpecializedInfo(methodDecl);
 						if (specializations == null) {
 							defs = defs.append(member);
 							continue;
 						}
-						
+
 						log.info("Generate specializations of {}.{}({}).", new Object[] { tree.name, methodDecl.name, methodDecl.params });
 						defs = defs.appendList(specializeMethodDef(context, methodDecl, specializations));
 					}
-					
+
 					tree.defs = defs;
 					result = tree;
 				}
 			});
-			
+
 			// Specialize classes
 			unit.accept(new TreeTranslator() {
 				@Override
@@ -499,7 +499,7 @@ public class Processor extends AbstractProcessor {
 					result = specializeClassDef(context, tree, specializations);
 				}
 			});
-			
+
 			// InjectPrimitive on methods
 			unit.accept(new TreeTranslator() {
 				@Override
@@ -509,12 +509,12 @@ public class Processor extends AbstractProcessor {
 						super.visitMethodDef(tree);
 						return;
 					}
-					
+
 					result = injectPrimitive(context, tree, injections);
 					log.info("Inject {} on {}.", injections.values(), tree.name);
 				}
 			});
-			
+
 
 			// InjectPrimitive on classes
 			unit.accept(new TreeTranslator() {
@@ -525,12 +525,12 @@ public class Processor extends AbstractProcessor {
 						super.visitClassDef(tree);
 						return;
 					}
-					
+
 					result = injectPrimitive(context, tree, injections);
 					log.info("Inject {} on {}.", injections.values(), tree.name);
 				}
 			});
-			
+
 			// Specialize type names
 			unit.accept(new TreeTranslator() {
 				@Override
@@ -548,10 +548,10 @@ public class Processor extends AbstractProcessor {
 				log.warn("Cannot write to {}.", out);
 			};
 		}
-		
+
 		return true;
 	}
-	
+
 	@Override
 	public synchronized void init(ProcessingEnvironment processingEnv) {
 		super.init(processingEnv);

@@ -6,7 +6,7 @@ import net.thisptr.specialize.annotation.Specialize;
 import net.thisptr.specialize.annotation.Specializes;
 
 public class Example {
-	
+
 	@Specializes({
 		@Specialize(type = {int.class, double.class}, key = "T"),
 		@Specialize(type = {int.class, double.class}, key = "U")
@@ -14,13 +14,13 @@ public class Example {
 	public static class Pair<T, U> {
 		public final T first;
 		public final U second;
-		
+
 		public Pair(final T first, final U second) {
 			this.first = first;
 			this.second = second;
 		}
 	}
-	
+
 	@Specializes({
 		@Specialize(type = {int.class, float.class}, key = "Item"),
 		@Specialize(type = {int.class, double.class}, key = "Score", generic = false)
@@ -28,7 +28,7 @@ public class Example {
 	public static class BasicScoredItem<Item, Score> {
 		public final Item item;
 		public final Score score;
-		
+
 		public BasicScoredItem(final Item item, final Score score) {
 			this.item = item;
 			this.score = score;
@@ -41,14 +41,14 @@ public class Example {
 			super(item, score);
 		}
 	}
-	
+
 	@InjectPrimitive(key = "T", type = int.class)
 	public static class IntIntPair extends Pair<T, T> {
 		public IntIntPair(final T first, final T second) {
 			super(first, second);
 		}
 	}
-	
+
 	@InjectPrimitives({
 		@InjectPrimitive(key = "T", type = int.class),
 		@InjectPrimitive(key = "U", type = double.class)
@@ -58,19 +58,19 @@ public class Example {
 			super(first, second);
 		}
 	}
-	
+
 	@Specialize(type = {int.class, float.class}, key = "T")
 	public static class AtomicValue<T> {
 		private T value;
-		
+
 		public AtomicValue(final T value) {
 			this.value = value;
 		}
-		
+
 		public synchronized T getValue() {
 			return value;
 		}
-		
+
 		public synchronized void setValue(final T value) {
 			this.value = value;
 		}

@@ -31,7 +31,7 @@ import org.junit.runner.RunWith;
 
 @RunWith(Theories.class)
 public class ProcessorTest {
-	
+
 	@DataPoint
 	public static JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
 
@@ -47,18 +47,18 @@ public class ProcessorTest {
 	public void testCompile(final JavaCompiler compiler, final String className) throws IOException {
 		final Locale locale = Locale.getDefault();
 		final Charset charset = Charset.defaultCharset();
-		
+
 		final DiagnosticListener<JavaFileObject> diagnosticListener = new DiagnosticListener<JavaFileObject>() {
 			@Override
 			public void report(Diagnostic<? extends JavaFileObject> diagnostic) {
 			}
 		};
-		
+
 		final StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnosticListener, locale, charset);
 		fileManager.setLocation(StandardLocation.SOURCE_PATH, Arrays.asList(new File("src/test/java")));
 		fileManager.setLocation(StandardLocation.CLASS_OUTPUT, Arrays.asList(new File("target/test-classes")));
 		final JavaFileObject sourceFile = fileManager.getJavaFileForInput(StandardLocation.SOURCE_PATH, className, Kind.SOURCE);
-		
+
 		final ByteArrayOutputStream bos = new ByteArrayOutputStream();
 		final Writer writer = new OutputStreamWriter(bos);
 		try {

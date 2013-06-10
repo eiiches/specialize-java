@@ -15,12 +15,12 @@ public class AnnotationUtilsTest {
 		public int value();
 		public String yukino() default "yukino";
 	}
-	
+
 	@Test
 	public void testGetMembers() {
 		assertEquals(new HashSet<String>(Arrays.asList("value", "yukino")), AnnotationUtils.getMembers(TestInterface.class));
 	}
-	
+
 	public void testGetDefaultValue() {
 		assertEquals("yukino", AnnotationUtils.getDefaultValue(TestInterface.class, "yukino"));
 	}
