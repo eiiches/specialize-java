@@ -8,7 +8,5 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.SOURCE)
 @Target({ElementType.TYPE, ElementType.METHOD})
 public @interface Specialize {
-	Class<?>[] type();
-	boolean generic() default true;
-	String key() default "";
+	String[] value();
 }

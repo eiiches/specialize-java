@@ -1,15 +1,13 @@
 package net.thisptr.specialize.example;
 
 import net.thisptr.specialize.annotation.InjectPrimitive;
-import net.thisptr.specialize.annotation.InjectPrimitives;
 import net.thisptr.specialize.annotation.Specialize;
-import net.thisptr.specialize.annotation.Specializes;
 
 public class Example {
 
-	@Specializes({
-		@Specialize(type = {int.class, double.class}, key = "T"),
-		@Specialize(type = {int.class, double.class}, key = "U")
+	@Specialize({
+		"T: int, double, ?",
+		"U: int, double, ?"
 	})
 	public static class Pair<T, U> {
 		public final T first;
@@ -21,10 +19,7 @@ public class Example {
 		}
 	}
 
-	@Specializes({
-		@Specialize(type = {int.class, float.class}, key = "Item"),
-		@Specialize(type = {int.class, double.class}, key = "Score", generic = false)
-	})
+	@Specialize("Score: int, double")
 	public static class BasicScoredItem<Item, Score> {
 		public final Item item;
 		public final Score score;
@@ -35,23 +30,23 @@ public class Example {
 		}
 	}
 
-	@InjectPrimitive(key = "T", type = double.class)
+	@InjectPrimitive("T: double")
 	public static class ScoredItem<Item> extends BasicScoredItem<Item, T> {
 		public ScoredItem(final Item item, final T score) {
 			super(item, score);
 		}
 	}
 
-	@InjectPrimitive(key = "T", type = int.class)
+	@InjectPrimitive("T: int")
 	public static class IntIntPair extends Pair<T, T> {
 		public IntIntPair(final T first, final T second) {
 			super(first, second);
 		}
 	}
 
-	@InjectPrimitives({
-		@InjectPrimitive(key = "T", type = int.class),
-		@InjectPrimitive(key = "U", type = double.class)
+	@InjectPrimitive({
+		"T: int",
+		"U: double"
 	})
 	public static class IntDoublePair extends Pair<T, U> {
 		public IntDoublePair(final T first, final U second) {
@@ -59,7 +54,7 @@ public class Example {
 		}
 	}
 
-	@Specialize(type = {int.class, float.class}, key = "T")
+	@Specialize("T: int, float, ?")
 	public static class AtomicValue<T> {
 		private T value;
 
@@ -76,13 +71,13 @@ public class Example {
 		}
 	}
 
-	@Specialize(type = {int.class, float.class}, key = "T", generic = false)
-	@InjectPrimitive(type = int.class, key = "U")
+	@Specialize("T: int, float")
+	@InjectPrimitive("U: int")
 	public static <T> T someProcess(final AtomicValue<T> i, final AtomicValue<U> p) {
 		return i.getValue() + p.getValue();
 	}
 
-	@Specialize(key = "T", type = {int.class, float.class}, generic = false)
+	@Specialize("T: int, float")
 	public static <T> T sum(final T[] values) {
 		T result = 0;
 		for (final T value : values)

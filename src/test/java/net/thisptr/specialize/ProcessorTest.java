@@ -27,10 +27,13 @@ import org.junit.experimental.theories.DataPoints;
 import org.junit.experimental.theories.Theories;
 import org.junit.experimental.theories.Theory;
 import org.junit.runner.RunWith;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 @RunWith(Theories.class)
 public class ProcessorTest {
+	private static Logger log = LoggerFactory.getLogger(ProcessorTest.class);
 
 	@DataPoint
 	public static JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
@@ -51,6 +54,7 @@ public class ProcessorTest {
 		final DiagnosticListener<JavaFileObject> diagnosticListener = new DiagnosticListener<JavaFileObject>() {
 			@Override
 			public void report(Diagnostic<? extends JavaFileObject> diagnostic) {
+				log.info("{}", diagnostic.getMessage(Locale.getDefault()));
 			}
 		};
 
@@ -71,7 +75,7 @@ public class ProcessorTest {
 			try {
 				writer.close();
 			} catch (IOException e) {}
-			System.out.println(bos.toString());
+			System.err.println(bos.toString());
 		}
 	}
 }
