@@ -1,24 +1,30 @@
-package net.thisptr.specialize.internal;
+package net.thisptr.specialize.processor.internal;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Stack;
 
-import net.thisptr.specialize.annotation.Specialize;
+import net.thisptr.specialize.Specialize;
 
 public class SpecializeInfo {
 	private Map<String, SpecializeInfo.TypeParam> typeParams = new HashMap<String, SpecializeInfo.TypeParam>();
 
 	public static class TypeParam {
 		public final String key;
-		public final List<String> types;
+		public final Set<String> types;
 
 		public TypeParam(final String key, final String[] types) {
 			this.key = key;
-			this.types = Arrays.asList(types);
+			this.types = new HashSet<String>(Arrays.asList(types));
+			if (this.types.contains("*")) {
+				this.types.remove("*");
+				this.types.addAll(Arrays.asList("long", "int", "short", "byte", "char", "float", "double", "boolean"));
+			}
 		}
 
 		public boolean isGenericAllowed() {

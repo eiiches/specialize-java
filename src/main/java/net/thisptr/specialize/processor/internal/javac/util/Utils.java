@@ -1,4 +1,4 @@
-package net.thisptr.specialize.internal.util;
+package net.thisptr.specialize.processor.internal.javac.util;
 
 import java.io.File;
 import java.io.FileWriter;

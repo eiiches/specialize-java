@@ -1,11 +1,11 @@
-package net.thisptr.specialize.internal;
+package net.thisptr.specialize.processor.internal;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import net.thisptr.specialize.annotation.InjectPrimitive;
+import net.thisptr.specialize.InjectPrimitive;
 
 public class InjectInfo {
 	private final Map<String, TypeParam> typeParams = new HashMap<String, TypeParam>();

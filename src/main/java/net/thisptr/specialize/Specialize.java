@@ -1,4 +1,4 @@
-package net.thisptr.specialize.annotation;
+package net.thisptr.specialize;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

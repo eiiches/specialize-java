@@ -1,7 +1,6 @@
 package net.thisptr.specialize.example;
 
-import net.thisptr.specialize.annotation.InjectPrimitive;
-import net.thisptr.specialize.annotation.Specialize;
+import net.thisptr.specialize.Specialize;
 
 public class Example {
 
@@ -30,31 +29,19 @@ public class Example {
 		}
 	}
 
-	@InjectPrimitive("T: double")
-	public static class ScoredItem<Item> extends BasicScoredItem<Item, T> {
-		public ScoredItem(final Item item, final T score) {
+	public static class ScoredItem<Item> extends BasicScoredItem<Item, $double> {
+		public ScoredItem(final Item item, final double score) {
 			super(item, score);
 		}
 	}
 
-	@InjectPrimitive("T: int")
-	public static class IntIntPair extends Pair<T, T> {
-		public IntIntPair(final T first, final T second) {
+	public static class IntDoublePair extends Pair<$int, $double> {
+		public IntDoublePair(final int first, final double second) {
 			super(first, second);
 		}
 	}
 
-	@InjectPrimitive({
-		"T: int",
-		"U: double"
-	})
-	public static class IntDoublePair extends Pair<T, U> {
-		public IntDoublePair(final T first, final U second) {
-			super(first, second);
-		}
-	}
-
-	@Specialize("T: int, float, ?")
+	@Specialize("T: int, float, boolean, ?")
 	public static class AtomicValue<T> {
 		private T value;
 
@@ -71,9 +58,10 @@ public class Example {
 		}
 	}
 
+	public static AtomicValue<$boolean> b = new AtomicValue<$boolean>(true);
+
 	@Specialize("T: int, float")
-	@InjectPrimitive("U: int")
-	public static <T> T someProcess(final AtomicValue<T> i, final AtomicValue<U> p) {
+	public static <T> T someProcess(final AtomicValue<T> i, final AtomicValue<$int> p) {
 		return i.getValue() + p.getValue();
 	}
 
@@ -85,21 +73,86 @@ public class Example {
 		return result;
 	}
 
-	public void main() {
-		AtomicValue<int> hoge =  new AtomicValue<int>(10);
-		hoge = new AtomicValue<int>(20);
+	// done
+	public static void main1() {
+		AtomicValue<$int> hoge = new AtomicValue<$int>(10);
+		hoge = new AtomicValue<$int>(20);
 		hoge.setValue(20);
 		final int value = hoge.getValue();
 		System.out.println(value);
+		final int value2 = someProcess(hoge, hoge);
+	}
 
-		final BasicScoredItem<String, double> a = new BasicScoredItem<String, double>("hoge", 2.0);
+	// done
+	public static void main2() {
+		final BasicScoredItem<String, $double> a = new BasicScoredItem<String, $double>("hoge", 2.0);
 		final double aScore = a.score;
 		System.out.println(aScore);
 
 		final ScoredItem<String> b = new ScoredItem<String>("hoge", 2.0);
 		final double bScore = b.score;
 		System.out.println(bScore);
-
-		final int value2 = someProcess(hoge, hoge);
 	}
+
+	public static void candidate5() {
+		AtomicValue</* @int */Integer> hoge = new AtomicValue</* @int */Integer>(10);
+		hoge = new AtomicValue</* @int */Integer>(20);
+
+		AtomicValue</* @int */Integer> fuga = new AtomicValue<>(10);
+		fuga = new AtomicValue<>(20);
+	}
+
+//	public static void candidate4() {
+//		@Specialized("<int>") AtomicValue<Integer> hoge = new AtomicValue<Integer>(10);
+//		hoge = new AtomicValue<Integer>(20);
+//
+//		@Specialized("<int>") AtomicValue<Integer> fuga = new AtomicValue<>(10);
+//		fuga = new AtomicValue<>(20);
+//	}
+
+	public static void candidate3() {
+		AtomicValue<$int> hoge = new AtomicValue<$int>(10);
+		hoge = new AtomicValue<$int>(20);
+
+		hoge.setValue(20);
+		final int value = hoge.getValue();
+		System.out.println(value);
+		final int value2 = someProcess(hoge, hoge);
+
+//		AtomicValue<int> fuga = new AtomicValue<>(10);
+//		fuga = new AtomicValue<>(20);
+	}
+
+//	public static void candidate2() {
+//		AtomicValue<_int> hoge = new AtomicValue<_int>(10);
+//		hoge = new AtomicValue<_int>(20);
+//
+//		hoge.setValue(20);
+//		final int value = hoge.getValue();
+//		System.out.println(value);
+//		final int value2 = someProcess(hoge, hoge);
+//
+////		AtomicValue<int> fuga = new AtomicValue<>(10);
+////		fuga = new AtomicValue<>(20);
+//	}
+
+//	public static void candidate1() {
+//		AtomicValue<int> hoge = new AtomicValue<int>(10);
+//		hoge = new AtomicValue<int>(20);
+//
+////		AtomicValue<int> fuga = new AtomicValue<>(10);
+////		fuga = new AtomicValue<>(20);
+//	}
+
+	public static int test(final int a) {
+		int b = 10;
+		Class<?> p = int.class;
+
+		for (int i = 0; i < 10; ++i) {
+
+		}
+
+		return a;
+	}
+
 }

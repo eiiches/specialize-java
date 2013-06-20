@@ -1,9 +1,11 @@
-package net.thisptr.specialize;
+package net.thisptr.specialize.processor.internal.javac;
 
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 import javax.annotation.processing.AbstractProcessor;
@@ -11,16 +13,15 @@ import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
-import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
+import javax.tools.Diagnostic.Kind;
 import javax.tools.JavaFileObject;
 
-import net.thisptr.specialize.annotation.InjectPrimitive;
-import net.thisptr.specialize.annotation.Specialize;
-import net.thisptr.specialize.internal.InjectInfo;
-import net.thisptr.specialize.internal.SpecializeInfo;
-import net.thisptr.specialize.internal.util.Utils;
+import net.thisptr.specialize.Specialize;
+import net.thisptr.specialize.processor.internal.InjectInfo;
+import net.thisptr.specialize.processor.internal.SpecializeInfo;
+import net.thisptr.specialize.processor.internal.javac.util.Utils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,8 +49,36 @@ import com.sun.tools.javac.util.Names;
 
 // @SupportedSourceVersion(SourceVersion.RELEASE_6)
 @SupportedAnnotationTypes("*")
-public class Processor extends AbstractProcessor {
-	private static Logger log = LoggerFactory.getLogger(Processor.class);
+public class JavacProcessor extends AbstractProcessor {
+	private static Logger log = LoggerFactory.getLogger(JavacProcessor.class);
+
+	private static String[] primitiveTypes = new String[] {
+			"int", "short", "char", "byte", "long", "float", "double", "boolean"
+	};
+
+	private static Map<String, String> dollaredTypes = new HashMap<String, String>();
+	static {
+		for (final String primitiveType : primitiveTypes)
+			dollaredTypes.put("$" + primitiveType, primitiveType);
+	}
+
+	private static <T extends JCTree> T replaceIdentifierWithPrimitive(final Context context, final T tree, final Map<String, String> mapping) {
+		final TreeMaker treeMaker = TreeMaker.instance(context);
+
+		tree.accept(new TreeTranslator() {
+			@Override
+			public void visitIdent(final JCIdent tree) {
+				if (!mapping.containsKey(tree.toString())) {
+					super.visitIdent(tree);
+					return;
+				}
+
+				result = treeMaker.Type(Utils.toType(context, mapping.get(tree.toString())));
+			}
+		});
+
+		return tree;
+	}
 
 	private static <T extends JCTree> T injectPrimitive(final Context context, final T tree, final InjectInfo injectInfo) {
 		final TreeMaker treeMaker = TreeMaker.instance(context);
@@ -164,62 +193,41 @@ public class Processor extends AbstractProcessor {
 		}
 	}
 
+	private Messager messager;
+
 	@Override
 	public boolean process(final Set<? extends TypeElement> annotations, final RoundEnvironment roundEnv) {
-		@SuppressWarnings("unused")
-		final Messager messager = processingEnv.getMessager();
+		if (roundEnv.processingOver())
+			return true;
+
+		messager.printMessage(Kind.NOTE, "Running specialize-java.");
+
 		final JavacProcessingEnvironment javacProcessingEnv = (JavacProcessingEnvironment) processingEnv;
 		final Trees trees = Trees.instance(processingEnv);
 		final Context context = javacProcessingEnv.getContext();
 
-//		final Set<Element> annotatedElements = new HashSet<Element>();
-//		annotatedElements.addAll(roundEnv.getElementsAnnotatedWith(Specialize.class));
-//		annotatedElements.addAll(roundEnv.getElementsAnnotatedWith(InjectPrimitive.class));
-//
-//		for (final Element element : annotatedElements) {
-//			final Tree annotated = trees.getTree(element);
-//			final Tree enclosure = trees.getTree(element.getEnclosingElement());
-//
-//			Tree modified = annotated;
-//			for (final TreeModifier modifier : modifiers) {
-//				modified = modifier.modify(modified);
-//			}
-//
-//			if (modified != annotated) {
-//				enclosure.defs rewrite modified
-//			}
-//		}
+		// Replace $primitive types.
+		for (final Element rootElement : roundEnv.getRootElements()) {
+			final JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(rootElement).getCompilationUnit();
 
-		// InjectPrimitive
-		for (final Element element : roundEnv.getElementsAnnotatedWith(InjectPrimitive.class)) {
-			final InjectPrimitive annotation = element.getAnnotation(InjectPrimitive.class);
-			log.info("annotation: {}", annotation);
+			// ignore other than sources
+			if (unit.getSourceFile().getKind() != JavaFileObject.Kind.SOURCE)
+				continue;
 
-			final InjectInfo injectInfo = InjectInfo.parse(annotation);
-
-			final Tree annotated = trees.getTree(element);
-			final Tree enclosure = trees.getTree(element.getEnclosingElement());
-
-			if (enclosure instanceof JCClassDecl) {
-				final JCClassDecl classDecl = (JCClassDecl) enclosure;
-
-				final java.util.List<JCTree> defs = Utils.toMutableList(classDecl.defs);
-				defs.remove(annotated);
-				defs.add(injectPrimitive(context, (JCTree) annotated, injectInfo));
-
-				classDecl.defs = Utils.toImmutableList(defs);
-			} else if (enclosure instanceof JCCompilationUnit) {
-				final JCCompilationUnit unit = (JCCompilationUnit) enclosure;
-
-				final java.util.List<JCTree> defs = Utils.toMutableList(unit.defs);
-				defs.remove(annotated);
-				defs.add(injectPrimitive(context, (JCTree) annotated, injectInfo));
-
-				unit.defs = Utils.toImmutableList(defs);
-			} else {
-				log.error("Unhandled enclosure type: {}", enclosure);
-			}
+			replaceIdentifierWithPrimitive(context, unit, dollaredTypes);
 		}
+
+//		// InjectPrimitive
+//		for (final Element element : roundEnv.getElementsAnnotatedWith(InjectPrimitive.class)) {
+//			final InjectPrimitive annotation = element.getAnnotation(InjectPrimitive.class);
+//			log.info("annotation: {}", annotation);
+//
+//			final InjectInfo injectInfo = InjectInfo.parse(annotation);
+//
+//			final Tree annotated = trees.getTree(element);
+//
+//			injectPrimitive(context, (JCTree) annotated, injectInfo);
+//		}
 
 		// Specialize
 		for (final Element element : roundEnv.getElementsAnnotatedWith(Specialize.class)) {
@@ -245,12 +253,13 @@ public class Processor extends AbstractProcessor {
 
 				classDecl.defs = Utils.toImmutableList(defs);
 			} else if (annotated instanceof JCClassDecl) {
+				log.info("Enclosure: {}", enclosure);
 				final JCClassDecl classDecl = (JCClassDecl) annotated;
 
 				final java.util.List<JCTree> defs = Utils.toMutableList(classDecl.defs);
 
 				if (!specializeInfo.isGenericAllowed())
-					defs.clear();
+					defs.clear(); // TODO: add private ctor to prevent instantiation
 
 				defs.addAll(specializeClassDef(context, classDecl, specializeInfo));
 
@@ -260,6 +269,7 @@ public class Processor extends AbstractProcessor {
 			}
 		}
 
+		// Specialize type apply
 		for (final Element rootElement : roundEnv.getRootElements()) {
 			final JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(rootElement).getCompilationUnit();
 
@@ -276,6 +286,21 @@ public class Processor extends AbstractProcessor {
 						log.info("Rewrite {} to {}.", tree, result);
 				}
 			});
+		}
+
+		// TODO: トップレベルクラスの特殊化は別ファイルにしてしまうのも要検討
+		//   他のクラスについても同階層にクラスを作ることになるので、統一感
+		//   inner classにしないので、non-static内部クラスも扱えるようになる
+
+		// TODO: remove import statements.
+
+		// Dump
+		for (final Element rootElement : roundEnv.getRootElements()) {
+			final JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(rootElement).getCompilationUnit();
+
+			// ignore other than sources
+			if (unit.getSourceFile().getKind() != JavaFileObject.Kind.SOURCE)
+				continue;
 
 			final File out = new File(unit.sourcefile.getName() + ".specialized");
 			try {
@@ -291,10 +316,6 @@ public class Processor extends AbstractProcessor {
 	@Override
 	public synchronized void init(ProcessingEnvironment processingEnv) {
 		super.init(processingEnv);
-	}
-
-	@Override
-	public SourceVersion getSupportedSourceVersion() {
-		return SourceVersion.values()[SourceVersion.values().length - 1];
+		messager = processingEnv.getMessager();
 	}
 }

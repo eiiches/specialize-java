@@ -1,4 +1,4 @@
-package net.thisptr.specialize;
+package net.thisptr.specialize.processor;
 
 import static org.junit.Assert.assertTrue;
 
@@ -9,6 +9,7 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 
 import javax.tools.Diagnostic;
@@ -21,6 +22,8 @@ import javax.tools.StandardJavaFileManager;
 import javax.tools.StandardLocation;
 import javax.tools.ToolProvider;
 
+import net.thisptr.specialize.processor.SpecializeProcessor;
+
 import org.eclipse.jdt.internal.compiler.tool.EclipseCompiler;
 import org.junit.experimental.theories.DataPoint;
 import org.junit.experimental.theories.DataPoints;
@@ -32,13 +35,14 @@ import org.slf4j.LoggerFactory;
 
 
 @RunWith(Theories.class)
-public class ProcessorTest {
-	private static Logger log = LoggerFactory.getLogger(ProcessorTest.class);
+public class SpecializeProcessorTest {
+	private static Logger log = LoggerFactory.getLogger(SpecializeProcessorTest.class);
+	private static Logger rlog = LoggerFactory.getLogger("RAW");
 
 	@DataPoint
 	public static JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
 
-	// @DataPoint
+//	@DataPoint
 	public static JavaCompiler eclipse = new EclipseCompiler();
 
 	@DataPoints
@@ -52,9 +56,22 @@ public class ProcessorTest {
 		final Charset charset = Charset.defaultCharset();
 
 		final DiagnosticListener<JavaFileObject> diagnosticListener = new DiagnosticListener<JavaFileObject>() {
+			private int plines = 0;
 			@Override
 			public void report(Diagnostic<? extends JavaFileObject> diagnostic) {
-				log.info("{}", diagnostic.getMessage(Locale.getDefault()));
+				JavaFileObject source = null;
+				try {
+					source = diagnostic.getSource();
+				} catch (Exception e) {}
+				final Diagnostic.Kind kind = diagnostic.getKind();
+				final String[] lines = diagnostic.getMessage(Locale.getDefault()).split("\n");
+				if (lines.length + (source != null ? 1 : 0) > 1 || plines > 1)
+					rlog.info("[{}] ----------------------------------------------------", kind);
+				if (source != null)
+					rlog.info("[{}] {} ({}:{})", kind, source.getName(), diagnostic.getLineNumber(), diagnostic.getColumnNumber());
+				for (final String line : lines)
+					rlog.info("[{}] {}", kind, line);
+				plines = lines.length + (source != null ? 1 : 0);
 			}
 		};
 
@@ -63,11 +80,16 @@ public class ProcessorTest {
 		fileManager.setLocation(StandardLocation.CLASS_OUTPUT, Arrays.asList(new File("target/test-classes")));
 		final JavaFileObject sourceFile = fileManager.getJavaFileForInput(StandardLocation.SOURCE_PATH, className, Kind.SOURCE);
 
+		final List<String> options = Arrays.asList(new String[] {
+				"-target", "1.7",
+				"-source", "1.7",
+		});
+
 		final ByteArrayOutputStream bos = new ByteArrayOutputStream();
 		final Writer writer = new OutputStreamWriter(bos);
 		try {
-			final CompilationTask task = compiler.getTask(writer, fileManager, diagnosticListener, Arrays.<String>asList(), null, Arrays.asList(sourceFile));
-			task.setProcessors(Arrays.asList(new Processor()));
+			final CompilationTask task = compiler.getTask(writer, fileManager, diagnosticListener, options, null, Arrays.asList(sourceFile));
+			task.setProcessors(Arrays.asList(new SpecializeProcessor()));
 
 			final boolean success = task.call();
 			assertTrue(success);
@@ -75,7 +97,7 @@ public class ProcessorTest {
 			try {
 				writer.close();
 			} catch (IOException e) {}
-			System.err.println(bos.toString());
+//			System.err.println(bos.toString());
 		}
 	}
 }
