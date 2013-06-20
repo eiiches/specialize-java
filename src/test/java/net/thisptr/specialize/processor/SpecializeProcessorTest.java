@@ -78,6 +78,7 @@ public class SpecializeProcessorTest {
 		final StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnosticListener, locale, charset);
 		fileManager.setLocation(StandardLocation.SOURCE_PATH, Arrays.asList(new File("src/test/java")));
 		fileManager.setLocation(StandardLocation.CLASS_OUTPUT, Arrays.asList(new File("target/test-classes")));
+		fileManager.setLocation(StandardLocation.SOURCE_OUTPUT, Arrays.asList(new File("target/generated-test-sources")));
 		final JavaFileObject sourceFile = fileManager.getJavaFileForInput(StandardLocation.SOURCE_PATH, className, Kind.SOURCE);
 
 		final List<String> options = Arrays.asList(new String[] {

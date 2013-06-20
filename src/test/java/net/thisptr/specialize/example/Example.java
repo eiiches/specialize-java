@@ -2,7 +2,8 @@ package net.thisptr.specialize.example;
 
 import net.thisptr.specialize.Specialize;
 
-public class Example {
+@Specialize({"Q: int, ?"})
+public class Example<Q> {
 
 	@Specialize({
 		"T: int, double, ?",
@@ -18,7 +19,7 @@ public class Example {
 		}
 	}
 
-	@Specialize("Score: int, double")
+	@Specialize("Score: *, ?")
 	public static class BasicScoredItem<Item, Score> {
 		public final Item item;
 		public final Score score;
@@ -154,5 +155,10 @@ public class Example {
 
 		return a;
 	}
+
+}
+
+@Specialize("R: float, ?")
+class Hoge<R> {
 
 }

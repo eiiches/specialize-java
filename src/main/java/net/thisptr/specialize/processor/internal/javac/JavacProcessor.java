@@ -2,7 +2,7 @@ package net.thisptr.specialize.processor.internal.javac;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Modifier;
+import java.io.Writer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,6 +28,7 @@ import org.slf4j.LoggerFactory;
 
 import com.sun.source.tree.Tree;
 import com.sun.source.util.Trees;
+import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.processing.JavacProcessingEnvironment;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.JCClassDecl;
@@ -38,6 +39,7 @@ import com.sun.tools.javac.tree.JCTree.JCMethodDecl;
 import com.sun.tools.javac.tree.JCTree.JCPrimitiveTypeTree;
 import com.sun.tools.javac.tree.JCTree.JCTypeApply;
 import com.sun.tools.javac.tree.JCTree.JCTypeParameter;
+import com.sun.tools.javac.tree.Pretty;
 import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.tree.TreeTranslator;
 import com.sun.tools.javac.util.Context;
@@ -60,24 +62,6 @@ public class JavacProcessor extends AbstractProcessor {
 	static {
 		for (final String primitiveType : primitiveTypes)
 			dollaredTypes.put("$" + primitiveType, primitiveType);
-	}
-
-	private static <T extends JCTree> T replaceIdentifierWithPrimitive(final Context context, final T tree, final Map<String, String> mapping) {
-		final TreeMaker treeMaker = TreeMaker.instance(context);
-
-		tree.accept(new TreeTranslator() {
-			@Override
-			public void visitIdent(final JCIdent tree) {
-				if (!mapping.containsKey(tree.toString())) {
-					super.visitIdent(tree);
-					return;
-				}
-
-				result = treeMaker.Type(Utils.toType(context, mapping.get(tree.toString())));
-			}
-		});
-
-		return tree;
 	}
 
 	private static <T extends JCTree> T injectPrimitive(final Context context, final T tree, final InjectInfo injectInfo) {
@@ -132,7 +116,7 @@ public class JavacProcessor extends AbstractProcessor {
 			final JCClassDecl specialized = injectPrimitive(context, Utils.copyTree(context, classDecl), injectInfo);
 
 			// modify class name and parameter
-			final StringBuilder specializedName = new StringBuilder("$specialized");
+			final StringBuilder specializedName = new StringBuilder(classDecl.name.toString() + "$specialized");
 			List<JCTypeParameter> genericArguments = List.nil();
 
 			for (final JCTypeParameter typaram: classDecl.typarams) {
@@ -148,9 +132,6 @@ public class JavacProcessor extends AbstractProcessor {
 			specialized.name = names.fromString(specializedName.toString());
 			specialized.typarams = genericArguments;
 
-			// FIXME: this should be done only if original class is a top level class.
-			specialized.mods.flags |= Modifier.STATIC;
-
 			// some clean up
 			Utils.removeAnnotation(specialized, Specialize.class);
 
@@ -164,7 +145,8 @@ public class JavacProcessor extends AbstractProcessor {
 		final TreeMaker treeMaker = TreeMaker.instance(context);
 		final Names names = Names.instance(context);
 
-		final StringBuilder specializedName = new StringBuilder("$specialized");
+		// FIXME: handle case when typeApply.clazz is an instance of JCFieldAccess
+		final StringBuilder specializedName = new StringBuilder(typeApply.clazz + "$specialized");
 		List<JCExpression> genericArguments = List.<JCExpression>nil();
 		List<JCExpression> primitiveArguments = List.<JCExpression>nil();
 
@@ -172,6 +154,10 @@ public class JavacProcessor extends AbstractProcessor {
 			if (argument instanceof JCPrimitiveTypeTree) {
 				primitiveArguments = primitiveArguments.append(argument);
 				specializedName.append("$" + argument.toString());
+			} else
+			if (argument instanceof JCIdent && dollaredTypes.containsKey(argument.toString())) {
+				primitiveArguments = primitiveArguments.append(argument);
+				specializedName.append("$" + dollaredTypes.get(argument.toString()));
 			} else {
 				genericArguments = genericArguments.append(argument);
 				specializedName.append("$_");
@@ -181,7 +167,8 @@ public class JavacProcessor extends AbstractProcessor {
 		if (primitiveArguments.isEmpty())
 			return typeApply;
 
-		final JCExpression specializedClass = treeMaker.Select(typeApply.clazz, names.fromString(specializedName.toString()));
+		// final JCExpression specializedClass = treeMaker.Select(typeApply.clazz, names.fromString(specializedName.toString()));
+		final JCExpression specializedClass = treeMaker.Ident(names.fromString(specializedName.toString()));
 
 		if (genericArguments.isEmpty()) {
 			// fully specialized
@@ -206,29 +193,6 @@ public class JavacProcessor extends AbstractProcessor {
 		final Trees trees = Trees.instance(processingEnv);
 		final Context context = javacProcessingEnv.getContext();
 
-		// Replace $primitive types.
-		for (final Element rootElement : roundEnv.getRootElements()) {
-			final JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(rootElement).getCompilationUnit();
-
-			// ignore other than sources
-			if (unit.getSourceFile().getKind() != JavaFileObject.Kind.SOURCE)
-				continue;
-
-			replaceIdentifierWithPrimitive(context, unit, dollaredTypes);
-		}
-
-//		// InjectPrimitive
-//		for (final Element element : roundEnv.getElementsAnnotatedWith(InjectPrimitive.class)) {
-//			final InjectPrimitive annotation = element.getAnnotation(InjectPrimitive.class);
-//			log.info("annotation: {}", annotation);
-//
-//			final InjectInfo injectInfo = InjectInfo.parse(annotation);
-//
-//			final Tree annotated = trees.getTree(element);
-//
-//			injectPrimitive(context, (JCTree) annotated, injectInfo);
-//		}
-
 		// Specialize
 		for (final Element element : roundEnv.getElementsAnnotatedWith(Specialize.class)) {
 			final Specialize annotation = element.getAnnotation(Specialize.class);
@@ -238,32 +202,78 @@ public class JavacProcessor extends AbstractProcessor {
 
 			final Tree annotated = trees.getTree(element);
 			final Tree enclosure = trees.getTree(element.getEnclosingElement());
+			final JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(element).getCompilationUnit();
 
 			// TODO: anonymous inner class?
 			if (annotated instanceof JCMethodDecl && enclosure instanceof JCClassDecl) {
 				final JCMethodDecl methodDecl = (JCMethodDecl) annotated;
-				final JCClassDecl classDecl = (JCClassDecl) enclosure;
+				final JCClassDecl enclosureDecl = (JCClassDecl) enclosure;
 
-				final java.util.List<JCTree> defs = Utils.toMutableList(classDecl.defs);
+				final java.util.List<JCTree> defs = Utils.toMutableList(enclosureDecl.defs);
+
+				defs.addAll(specializeMethodDef(context, methodDecl, specializeInfo));
+				Utils.removeAnnotation(methodDecl, Specialize.class);
 
 				if (!specializeInfo.isGenericAllowed())
 					defs.remove(methodDecl);
 
-				defs.addAll(specializeMethodDef(context, methodDecl, specializeInfo));
-
-				classDecl.defs = Utils.toImmutableList(defs);
-			} else if (annotated instanceof JCClassDecl) {
-				log.info("Enclosure: {}", enclosure);
+				enclosureDecl.defs = Utils.toImmutableList(defs);
+			} else if (annotated instanceof JCClassDecl && enclosure instanceof JCClassDecl) {
 				final JCClassDecl classDecl = (JCClassDecl) annotated;
+				final JCClassDecl enclosureDecl = (JCClassDecl) enclosure;
 
-				final java.util.List<JCTree> defs = Utils.toMutableList(classDecl.defs);
-
-				if (!specializeInfo.isGenericAllowed())
-					defs.clear(); // TODO: add private ctor to prevent instantiation
+				final java.util.List<JCTree> defs = Utils.toMutableList(enclosureDecl.defs);
 
 				defs.addAll(specializeClassDef(context, classDecl, specializeInfo));
+				Utils.removeAnnotation(classDecl, Specialize.class);
 
-				classDecl.defs = Utils.toImmutableList(defs);
+				if (!specializeInfo.isGenericAllowed())
+					classDecl.defs = List.nil();
+
+				enclosureDecl.defs = Utils.toImmutableList(defs);
+			} else if (annotated instanceof JCClassDecl && enclosure == null) {
+				final JCClassDecl classDecl = (JCClassDecl) annotated;
+
+				if ((classDecl.mods.flags & Flags.PUBLIC) != 0) { // then the class is principal top level.
+					try {
+						for (final JCClassDecl specialized : specializeClassDef(context, classDecl, specializeInfo)) {
+							final JavaFileObject specializedSource = processingEnv.getFiler().createSourceFile(unit.packge.toString() + "." + specialized.name);
+							try (final Writer writer = specializedSource.openWriter()) {
+								final JCCompilationUnit copyUnit = Utils.copyTree(context, unit);
+
+								// exclude top level classes, keeping import statements, etc.
+								final java.util.List<JCTree> defs = new ArrayList<JCTree>();
+								for (final JCTree def : copyUnit.defs) {
+									if (def instanceof JCClassDecl)
+										continue;
+									defs.add(def);
+								}
+								defs.add(specialized);
+								copyUnit.defs = Utils.toImmutableList(defs);
+
+								copyUnit.accept(new Pretty(writer, true));
+							}
+						}
+						Utils.removeAnnotation(classDecl, Specialize.class);
+					} catch (IOException e) {
+						log.error("Cannot open source file for writing.");
+						throw new RuntimeException(e);
+					}
+
+					if (!specializeInfo.isGenericAllowed())
+						classDecl.defs = List.nil();
+
+				} else { // non-public top level class, which can be specialized in-file.
+					final java.util.List<JCTree> defs = Utils.toMutableList(unit.defs);
+
+					defs.addAll(specializeClassDef(context, classDecl, specializeInfo));
+					Utils.removeAnnotation(classDecl, Specialize.class);
+
+					if (!specializeInfo.isGenericAllowed())
+						classDecl.defs = List.nil();
+
+					unit.defs = Utils.toImmutableList(defs);
+				}
 			} else {
 				log.error("Unhandled, enclosure: {}, element: {}", enclosure.getClass(), annotated.getClass());
 			}
@@ -287,10 +297,6 @@ public class JavacProcessor extends AbstractProcessor {
 				}
 			});
 		}
-
-		// TODO: トップレベルクラスの特殊化は別ファイルにしてしまうのも要検討
-		//   他のクラスについても同階層にクラスを作ることになるので、統一感
-		//   inner classにしないので、non-static内部クラスも扱えるようになる
 
 		// TODO: remove import statements.
 
