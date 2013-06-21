@@ -6,6 +6,7 @@ import java.io.Writer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -36,6 +37,7 @@ import com.sun.tools.javac.tree.JCTree.JCClassDecl;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.tree.JCTree.JCExpression;
 import com.sun.tools.javac.tree.JCTree.JCIdent;
+import com.sun.tools.javac.tree.JCTree.JCImport;
 import com.sun.tools.javac.tree.JCTree.JCMethodDecl;
 import com.sun.tools.javac.tree.JCTree.JCTypeApply;
 import com.sun.tools.javac.tree.JCTree.JCTypeParameter;
@@ -44,7 +46,6 @@ import com.sun.tools.javac.tree.Pretty;
 import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.tree.TreeTranslator;
 import com.sun.tools.javac.util.Context;
-import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Names;
 
 // TODO: 型パラメータに含まれるものを特殊化するときはspecialize,
@@ -83,7 +84,7 @@ public class JavacProcessor extends AbstractProcessor {
 
 			@Override
 			public void visitTypeApply(final JCTypeApply tree) {
-				final java.util.List<JCExpression> arguments = new ArrayList<JCExpression>();
+				final List<JCExpression> arguments = new ArrayList<JCExpression>();
 				for (final JCExpression argument : tree.arguments) {
 					if (argument instanceof JCIdent) {
 						if (injectInfo.contains(argument.toString())) {
@@ -110,20 +111,20 @@ public class JavacProcessor extends AbstractProcessor {
 		return tree;
 	}
 
-	private static java.util.List<JCMethodDecl> specializeMethodDef(final Context context, final JCMethodDecl methodDecl, final SpecializeInfo specializeInfo) {
-		final java.util.List<JCMethodDecl> result = new ArrayList<JCMethodDecl>();
+	private static List<JCMethodDecl> specializeMethodDef(final Context context, final JCMethodDecl methodDecl, final SpecializeInfo specializeInfo) {
+		final List<JCMethodDecl> result = new ArrayList<JCMethodDecl>();
 
 		for (final InjectInfo injectInfo : specializeInfo.getTypeCombinations()) {
 			final JCMethodDecl specialized = injectPrimitive(context, Utils.copyTree(context, methodDecl), injectInfo);
 
 			// modify type parameters
-			List<JCTypeParameter> genericArguments = List.nil();
+			final List<JCTypeParameter> genericArguments = new ArrayList<JCTypeParameter>();
 			for (final JCTypeParameter typaram : methodDecl.typarams) {
 				if (injectInfo.contains(typaram.toString()))
 					continue;
-				genericArguments = genericArguments.append(typaram);
+				genericArguments.add(typaram);
 			}
-			specialized.typarams = genericArguments;
+			specialized.typarams = Utils.toImmutableList(genericArguments);
 
 			// some clean up
 			Utils.removeAnnotation(specialized, Specialize.class);
@@ -134,30 +135,30 @@ public class JavacProcessor extends AbstractProcessor {
 		return result;
 	}
 
-	private static java.util.List<JCClassDecl> specializeClassDef(final Context context, final JCClassDecl classDecl, final SpecializeInfo specializeInfo) {
+	private static List<JCClassDecl> specializeClassDef(final Context context, final JCClassDecl classDecl, final SpecializeInfo specializeInfo) {
 		final Names names = Names.instance(context);
 
-		final java.util.List<JCClassDecl> result = new ArrayList<JCClassDecl>();
+		final List<JCClassDecl> result = new ArrayList<JCClassDecl>();
 
 		for (final InjectInfo injectInfo : specializeInfo.getTypeCombinations()) {
 			final JCClassDecl specialized = injectPrimitive(context, Utils.copyTree(context, classDecl), injectInfo);
 
 			// modify class name and parameter
 			final StringBuilder specializedName = new StringBuilder(classDecl.name.toString() + "$specialized");
-			List<JCTypeParameter> genericArguments = List.nil();
+			final List<JCTypeParameter> genericArguments = new ArrayList<JCTypeParameter>();
 
 			for (final JCTypeParameter typaram: classDecl.typarams) {
 				if (injectInfo.contains(typaram.toString())) {
 					final InjectInfo.TypeParam typeParam = injectInfo.get(typaram.toString());
 					specializedName.append("$" + typeParam.type);
 				} else {
-					genericArguments = genericArguments.append(typaram);
+					genericArguments.add(typaram);
 					specializedName.append("$_");
 				}
 			}
 
 			specialized.name = names.fromString(specializedName.toString());
-			specialized.typarams = genericArguments;
+			specialized.typarams = Utils.toImmutableList(genericArguments);
 
 			// some clean up
 			Utils.removeAnnotation(specialized, Specialize.class);
@@ -174,15 +175,15 @@ public class JavacProcessor extends AbstractProcessor {
 
 		// FIXME: handle case when typeApply.clazz is an instance of JCFieldAccess
 		final StringBuilder specializedName = new StringBuilder(typeApply.clazz + "$specialized");
-		List<JCExpression> genericArguments = List.<JCExpression>nil();
-		List<JCExpression> primitiveArguments = List.<JCExpression>nil();
+		final List<JCExpression> genericArguments = new ArrayList<JCExpression>();
+		final List<JCExpression> primitiveArguments = new ArrayList<JCExpression>();
 
 		for (final JCExpression argument : typeApply.arguments) {
 			if (argument instanceof JCIdent && dollaredTypes.containsKey(argument.toString())) {
-				primitiveArguments = primitiveArguments.append(argument);
+				primitiveArguments.add(argument);
 				specializedName.append("$" + dollaredTypes.get(argument.toString()));
 			} else {
-				genericArguments = genericArguments.append(argument);
+				genericArguments.add(argument);
 				specializedName.append("$_");
 			}
 		}
@@ -198,7 +199,7 @@ public class JavacProcessor extends AbstractProcessor {
 			return specializedClass;
 		} else {
 			// apply remaining type argument
-			final JCTypeApply result = treeMaker.TypeApply(specializedClass, genericArguments);
+			final JCTypeApply result = treeMaker.TypeApply(specializedClass, Utils.toImmutableList(genericArguments));
 			return result;
 		}
 	}
@@ -233,7 +234,7 @@ public class JavacProcessor extends AbstractProcessor {
 				final JCMethodDecl methodDecl = (JCMethodDecl) annotated;
 				final JCClassDecl enclosureDecl = (JCClassDecl) enclosure;
 
-				final java.util.List<JCTree> defs = Utils.toMutableList(enclosureDecl.defs);
+				final List<JCTree> defs = Utils.toMutableList(enclosureDecl.defs);
 
 				defs.addAll(specializeMethodDef(context, methodDecl, specializeInfo));
 				Utils.removeAnnotation(methodDecl, Specialize.class);
@@ -246,13 +247,13 @@ public class JavacProcessor extends AbstractProcessor {
 				final JCClassDecl classDecl = (JCClassDecl) annotated;
 				final JCClassDecl enclosureDecl = (JCClassDecl) enclosure;
 
-				final java.util.List<JCTree> defs = Utils.toMutableList(enclosureDecl.defs);
+				final List<JCTree> defs = Utils.toMutableList(enclosureDecl.defs);
 
 				defs.addAll(specializeClassDef(context, classDecl, specializeInfo));
 				Utils.removeAnnotation(classDecl, Specialize.class);
 
 				if (!specializeInfo.isGenericAllowed())
-					classDecl.defs = List.nil();
+					classDecl.defs = Utils.emptyImmutableList();
 
 				enclosureDecl.defs = Utils.toImmutableList(defs);
 			} else if (annotated instanceof JCClassDecl && enclosure == null) {
@@ -266,7 +267,7 @@ public class JavacProcessor extends AbstractProcessor {
 								final JCCompilationUnit copyUnit = Utils.copyTree(context, unit);
 
 								// exclude top level classes, keeping import statements, etc.
-								final java.util.List<JCTree> defs = new ArrayList<JCTree>();
+								final List<JCTree> defs = new ArrayList<JCTree>();
 								for (final JCTree def : copyUnit.defs) {
 									if (def instanceof JCClassDecl)
 										continue;
@@ -285,16 +286,16 @@ public class JavacProcessor extends AbstractProcessor {
 					}
 
 					if (!specializeInfo.isGenericAllowed())
-						classDecl.defs = List.nil();
+						classDecl.defs = Utils.emptyImmutableList();
 
 				} else { // non-public top level class, which can be specialized in-file.
-					final java.util.List<JCTree> defs = Utils.toMutableList(unit.defs);
+					final List<JCTree> defs = Utils.toMutableList(unit.defs);
 
 					defs.addAll(specializeClassDef(context, classDecl, specializeInfo));
 					Utils.removeAnnotation(classDecl, Specialize.class);
 
 					if (!specializeInfo.isGenericAllowed())
-						classDecl.defs = List.nil();
+						classDecl.defs = Utils.emptyImmutableList();
 
 					unit.defs = Utils.toImmutableList(defs);
 				}
@@ -314,11 +315,19 @@ public class JavacProcessor extends AbstractProcessor {
 				continue;
 
 			final boolean[] isChanged = new boolean[] { false };
-
-			// Specialize type names
+			
+			// list imports
+			final List<JCImport> imports = new ArrayList<JCImport>();
+			for (final JCTree tree : unit.defs)
+				if (tree instanceof JCImport) {
+					final JCImport imp = (JCImport) tree;
+					imports.add(imp);
+				}
+			
+			// specialize type names
 			unit.accept(new TreeTranslator() {
 				@Override
-				public void visitTypeApply(JCTypeApply tree) {
+				public void visitTypeApply(final JCTypeApply tree) {
 					result = specializeTypeApply(context, tree);
 					if (result != tree) {
 						isChanged[0] = true;
@@ -331,7 +340,17 @@ public class JavacProcessor extends AbstractProcessor {
 				changedUnits.add(unit);
 		}
 
-		// TODO: remove import statements.
+		// TODO: add imports
+		
+		for (final Element rootElement : roundEnv.getRootElements()) {
+			final JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(rootElement).getCompilationUnit();
+
+			// ignore other than sources
+			if (unit.getSourceFile().getKind() != JavaFileObject.Kind.SOURCE)
+				continue;
+			
+			Utils.removeImport(unit, Specialize.class);
+		}
 
 		// Dump
 		for (final Element rootElement : roundEnv.getRootElements()) {
