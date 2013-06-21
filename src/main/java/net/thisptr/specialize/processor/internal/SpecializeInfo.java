@@ -27,7 +27,7 @@ public class SpecializeInfo {
 			}
 		}
 
-		public boolean isGenericAllowed() {
+		public boolean shouldGenerateGeneric() {
 			return types.contains("?");
 		}
 	}
@@ -57,9 +57,9 @@ public class SpecializeInfo {
 			return result;
 	}
 
-	public boolean isGenericAllowed() {
+	public boolean shouldGenerateGeneric() {
 		for (final SpecializeInfo.TypeParam typeParam : typeParams.values()) {
-			if (!typeParam.isGenericAllowed())
+			if (!typeParam.shouldGenerateGeneric())
 				return false;
 		}
 		return true;

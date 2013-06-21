@@ -1,6 +1,8 @@
 package net.thisptr.specialize.example;
 
+// these imports shall be removed
 import net.thisptr.specialize.Specialize;
+import net.thisptr.specialize.*;
 
 @Specialize({"Q: int, ?"})
 public class Example<Q> {
@@ -93,6 +95,12 @@ public class Example<Q> {
 		final ScoredItem<String> b = new ScoredItem<String>("hoge", 2.0);
 		final double bScore = b.score;
 		System.out.println(bScore);
+		
+		new BasicScoredItem<String, $double>("hoge", 2.0) {
+			{
+				final double a = this.score;
+			}
+		};
 	}
 
 	public static void candidate5() {
