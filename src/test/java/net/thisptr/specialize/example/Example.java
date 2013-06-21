@@ -38,7 +38,7 @@ public class Example<Q> {
 		}
 	}
 
-	public static class IntDoublePair extends Pair<$int, $double> {
+	public static class IntDoublePair extends net.thisptr.specialize.example.Example.Pair<$int, $double> {
 		public IntDoublePair(final int first, final double second) {
 			super(first, second);
 		}
@@ -95,7 +95,7 @@ public class Example<Q> {
 		final ScoredItem<String> b = new ScoredItem<String>("hoge", 2.0);
 		final double bScore = b.score;
 		System.out.println(bScore);
-		
+
 		new BasicScoredItem<String, $double>("hoge", 2.0) {
 			{
 				final double a = this.score;

@@ -38,13 +38,13 @@ public class Modifications {
 		}
 		unit.defs = Utils.toImmutableList(defs);
 	}
-	
+
 	public static void removeAnnotation(final JCModifiers mods, final Class<?> annotationClass) {
 		final List<JCAnnotation> annotations = new ArrayList<JCAnnotation>();
 		for (JCAnnotation annotation : mods.annotations) {
 			if (annotation.getAnnotationType().toString().equals(annotationClass.getSimpleName()))
 				continue;
-	
+
 			annotations.add(annotation);
 		}
 		mods.annotations = Utils.toImmutableList(annotations);

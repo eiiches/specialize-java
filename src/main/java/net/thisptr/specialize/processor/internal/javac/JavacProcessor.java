@@ -173,8 +173,17 @@ public class JavacProcessor extends AbstractProcessor {
 		final TreeMaker treeMaker = TreeMaker.instance(context);
 		final Names names = Names.instance(context);
 
-		// FIXME: handle case when typeApply.clazz is an instance of JCFieldAccess
-		final StringBuilder specializedName = new StringBuilder(typeApply.clazz + "$specialized");
+		final StringBuilder specializedName = new StringBuilder();
+		if (typeApply.clazz instanceof JCFieldAccess) {
+			specializedName.append(((JCFieldAccess) typeApply.clazz).name.toString());
+			specializedName.append("$specialized");
+		} else if (typeApply.clazz instanceof JCIdent) {
+			specializedName.append(((JCIdent) typeApply.clazz).toString());
+			specializedName.append("$specialized");
+		} else {
+			log.error("Unhandled typeApply.clazz: {}[{}]", typeApply.clazz, typeApply.clazz.getClass());
+		}
+
 		final List<JCExpression> genericArguments = new ArrayList<JCExpression>();
 		final List<JCExpression> primitiveArguments = new ArrayList<JCExpression>();
 
@@ -191,8 +200,14 @@ public class JavacProcessor extends AbstractProcessor {
 		if (primitiveArguments.isEmpty())
 			return typeApply;
 
-		// final JCExpression specializedClass = treeMaker.Select(typeApply.clazz, names.fromString(specializedName.toString()));
-		final JCExpression specializedClass = treeMaker.Ident(names.fromString(specializedName.toString()));
+		final JCExpression specializedClass = Utils.copyTree(context, typeApply.clazz);
+		if (typeApply.clazz instanceof JCFieldAccess) {
+			((JCFieldAccess) specializedClass).name = names.fromString(specializedName.toString());
+		} else if (typeApply.clazz instanceof JCIdent) {
+			((JCIdent) specializedClass).name = names.fromString(specializedName.toString());
+		} else {
+			log.error("Unhandled typeApply.clazz: {}[{}]", typeApply.clazz, typeApply.clazz.getClass());
+		}
 
 		if (genericArguments.isEmpty()) {
 			// fully specialized
@@ -314,7 +329,7 @@ public class JavacProcessor extends AbstractProcessor {
 				continue;
 
 			final boolean[] isChanged = new boolean[] { false };
-			
+
 			// list imports (by <class name, import statement> pairs)
 			final Map<String, JCImport> imports = new HashMap<String, JCImport>();
 			for (final JCTree tree : unit.defs)
@@ -329,12 +344,12 @@ public class JavacProcessor extends AbstractProcessor {
 						log.error("Unhandled imp.qualid: {}[{}]", imp.qualid, imp.qualid.getClass());
 					}
 				}
-			
+
 			final Map<String, JCTree> importsToAdd = new HashMap<String, JCTree>();
-			
+
 			// if an original class is imported by wildcard,
 			// then the specialized class is automatically imported.
-			
+
 			// specialize type names
 			unit.accept(new TreeTranslator() {
 				@Override
@@ -342,7 +357,7 @@ public class JavacProcessor extends AbstractProcessor {
 					result = specializeTypeApply(context, tree);
 					if (result != tree) {
 						log.info("Rewrite {} to {}.", tree, result);
-						
+
 						// add import if needed
 						if (tree.clazz instanceof JCFieldAccess) {
 							// if tree.clazz is a fully qualified JCFieldAccess,
@@ -350,7 +365,7 @@ public class JavacProcessor extends AbstractProcessor {
 						} else if (tree.clazz instanceof JCIdent) {
 							if (imports.containsKey(tree.clazz.toString())) {
 								final JCImport imp = imports.get(tree.clazz.toString());
-								
+
 								final JCImport specializedImp = Utils.copyTree(context, imp);
 								if (result instanceof JCTypeApply) {
 									((JCFieldAccess) specializedImp.qualid).name = ((JCIdent) ((JCTypeApply) result).clazz).name;
@@ -361,18 +376,18 @@ public class JavacProcessor extends AbstractProcessor {
 								} else {
 									log.error("Unhandled result: {}[{}]", result, result.getClass());
 								}
-								
+
 								log.info("Added {}", specializedImp);
 							}
 						} else {
 							log.error("Unhandled tree.clazz: {}[{}]", tree.clazz, tree.clazz.getClass());
 						}
-						
+
 						isChanged[0] = true;
 					}
 				}
 			});
-			
+
 			unit.defs = unit.defs.prependList(Utils.toImmutableList(importsToAdd.values()));
 
 			if (isChanged[0])
@@ -385,7 +400,7 @@ public class JavacProcessor extends AbstractProcessor {
 			// ignore other than sources
 			if (unit.getSourceFile().getKind() != JavaFileObject.Kind.SOURCE)
 				continue;
-			
+
 			Modifications.removeNonStaticImport(unit, Specialize.class);
 			Modifications.removeNonStaticStarImport(unit, Specialize.class.getPackage());
 		}

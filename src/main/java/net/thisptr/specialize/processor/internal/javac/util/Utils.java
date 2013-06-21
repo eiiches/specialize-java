@@ -68,12 +68,12 @@ public class Utils {
 			result = result.append(item);
 		return result;
 	}
-	
+
 	@SafeVarargs
 	public static <T> com.sun.tools.javac.util.List<T> toImmutableList(final T... items) {
 		return toImmutableList(Arrays.asList(items));
 	}
-	
+
 	public static <T> com.sun.tools.javac.util.List<T> emptyImmutableList() {
 		return toImmutableList();
 	}
