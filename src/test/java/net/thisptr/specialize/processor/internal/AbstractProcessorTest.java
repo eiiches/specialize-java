@@ -1,4 +1,4 @@
-package net.thisptr.specialize.processor;
+package net.thisptr.specialize.processor.internal;
 
 import static org.junit.Assert.assertTrue;
 
@@ -20,12 +20,9 @@ import javax.tools.JavaFileObject;
 import javax.tools.JavaFileObject.Kind;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.StandardLocation;
-import javax.tools.ToolProvider;
 
 import net.thisptr.specialize.processor.SpecializeProcessor;
 
-import org.eclipse.jdt.internal.compiler.tool.EclipseCompiler;
-import org.junit.experimental.theories.DataPoint;
 import org.junit.experimental.theories.DataPoints;
 import org.junit.experimental.theories.Theories;
 import org.junit.experimental.theories.Theory;
@@ -35,15 +32,9 @@ import org.slf4j.LoggerFactory;
 
 
 @RunWith(Theories.class)
-public class SpecializeProcessorTest {
-	private static Logger log = LoggerFactory.getLogger(SpecializeProcessorTest.class);
+public abstract class AbstractProcessorTest {
+	private static Logger log = LoggerFactory.getLogger(AbstractProcessorTest.class);
 	private static Logger rlog = LoggerFactory.getLogger("RAW");
-
-	@DataPoint
-	public static JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
-
-//	@DataPoint
-	public static JavaCompiler eclipse = new EclipseCompiler();
 
 	@DataPoints
 	public static String[] classNames = new String[] {
