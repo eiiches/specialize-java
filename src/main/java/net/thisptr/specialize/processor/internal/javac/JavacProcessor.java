@@ -36,9 +36,9 @@ import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.tree.JCTree.JCExpression;
 import com.sun.tools.javac.tree.JCTree.JCIdent;
 import com.sun.tools.javac.tree.JCTree.JCMethodDecl;
-import com.sun.tools.javac.tree.JCTree.JCPrimitiveTypeTree;
 import com.sun.tools.javac.tree.JCTree.JCTypeApply;
 import com.sun.tools.javac.tree.JCTree.JCTypeParameter;
+import com.sun.tools.javac.tree.JCTree.JCWildcard;
 import com.sun.tools.javac.tree.Pretty;
 import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.tree.TreeTranslator;
@@ -66,6 +66,7 @@ public class JavacProcessor extends AbstractProcessor {
 
 	private static <T extends JCTree> T injectPrimitive(final Context context, final T tree, final InjectInfo injectInfo) {
 		final TreeMaker treeMaker = TreeMaker.instance(context);
+		final Names names = Names.instance(context);
 
 		tree.accept(new TreeTranslator() {
 			@Override
@@ -77,6 +78,31 @@ public class JavacProcessor extends AbstractProcessor {
 
 				final InjectInfo.TypeParam typeParam = injectInfo.get(tree.toString());
 				result = treeMaker.Type(Utils.toType(context, typeParam.type));
+			}
+
+			@Override
+			public void visitTypeApply(final JCTypeApply tree) {
+				final java.util.List<JCExpression> arguments = new ArrayList<JCExpression>();
+				for (final JCExpression argument : tree.arguments) {
+					if (argument instanceof JCIdent) {
+						if (injectInfo.contains(argument.toString())) {
+							final InjectInfo.TypeParam typeParam = injectInfo.get(argument.toString());
+							arguments.add(treeMaker.Ident(names.fromString("$" + typeParam.type)));
+						} else {
+							arguments.add(argument);
+						}
+					} else if (argument instanceof JCWildcard) {
+						arguments.add(argument);
+					} else if (argument instanceof JCTypeApply) {
+						visitTypeApply((JCTypeApply) argument);
+						arguments.add((JCTypeApply) result);
+					} else {
+						log.error("Unhandled TypeApply argument type: {}[{}]", argument.toString(), argument.getClass());
+						arguments.add(argument);
+					}
+				}
+				tree.arguments = Utils.toImmutableList(arguments);
+				result = tree;
 			}
 		});
 
@@ -151,10 +177,6 @@ public class JavacProcessor extends AbstractProcessor {
 		List<JCExpression> primitiveArguments = List.<JCExpression>nil();
 
 		for (final JCExpression argument : typeApply.arguments) {
-			if (argument instanceof JCPrimitiveTypeTree) {
-				primitiveArguments = primitiveArguments.append(argument);
-				specializedName.append("$" + argument.toString());
-			} else
 			if (argument instanceof JCIdent && dollaredTypes.containsKey(argument.toString())) {
 				primitiveArguments = primitiveArguments.append(argument);
 				specializedName.append("$" + dollaredTypes.get(argument.toString()));
