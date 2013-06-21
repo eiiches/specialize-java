@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -214,6 +215,7 @@ public class JavacProcessor extends AbstractProcessor {
 		final JavacProcessingEnvironment javacProcessingEnv = (JavacProcessingEnvironment) processingEnv;
 		final Trees trees = Trees.instance(processingEnv);
 		final Context context = javacProcessingEnv.getContext();
+		final Set<JCCompilationUnit> changedUnits = new HashSet<JCCompilationUnit>();
 
 		// Specialize
 		for (final Element element : roundEnv.getElementsAnnotatedWith(Specialize.class)) {
@@ -299,6 +301,8 @@ public class JavacProcessor extends AbstractProcessor {
 			} else {
 				log.error("Unhandled, enclosure: {}, element: {}", enclosure.getClass(), annotated.getClass());
 			}
+
+			changedUnits.add(unit);
 		}
 
 		// Specialize type apply
@@ -309,15 +313,22 @@ public class JavacProcessor extends AbstractProcessor {
 			if (unit.getSourceFile().getKind() != JavaFileObject.Kind.SOURCE)
 				continue;
 
+			final boolean[] isChanged = new boolean[] { false };
+
 			// Specialize type names
 			unit.accept(new TreeTranslator() {
 				@Override
 				public void visitTypeApply(JCTypeApply tree) {
 					result = specializeTypeApply(context, tree);
-					if (result != tree)
+					if (result != tree) {
+						isChanged[0] = true;
 						log.info("Rewrite {} to {}.", tree, result);
+					}
 				}
 			});
+
+			if (isChanged[0])
+				changedUnits.add(unit);
 		}
 
 		// TODO: remove import statements.
@@ -325,6 +336,8 @@ public class JavacProcessor extends AbstractProcessor {
 		// Dump
 		for (final Element rootElement : roundEnv.getRootElements()) {
 			final JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(rootElement).getCompilationUnit();
+			if (!changedUnits.contains(unit))
+				continue;
 
 			// ignore other than sources
 			if (unit.getSourceFile().getKind() != JavaFileObject.Kind.SOURCE)
