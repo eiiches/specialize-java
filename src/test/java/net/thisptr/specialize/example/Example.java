@@ -101,6 +101,8 @@ public class Example<Q> {
 				final double a = this.score;
 			}
 		};
+
+		final BasicScoredItem<BasicScoredItem<String, $double>, $double> c = new BasicScoredItem<BasicScoredItem<String, $double>, $double>(a, 10.0);
 	}
 
 	public static void candidate5() {

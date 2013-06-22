@@ -191,6 +191,9 @@ public class JavacProcessor extends AbstractProcessor {
 			if (argument instanceof JCIdent && dollaredTypes.containsKey(argument.toString())) {
 				primitiveArguments.add(argument);
 				specializedName.append("$" + dollaredTypes.get(argument.toString()));
+			} else if (argument instanceof JCTypeApply) {
+				genericArguments.add(specializeTypeApply(context, (JCTypeApply) argument));
+				specializedName.append("$_");
 			} else {
 				genericArguments.add(argument);
 				specializedName.append("$_");
