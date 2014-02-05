@@ -1,15 +1,17 @@
 package net.thisptr.specialize.example;
 
-// these imports shall be removed
+// these imports will be removed after specialization
 import net.thisptr.specialize.Specialize;
-import net.thisptr.specialize.*;
+import net.thisptr.specialize.Exclusion;
 
 @Specialize({"Q: int, ?"})
 public class Example<Q> {
-
-	@Specialize({
+	
+	@Specialize(value = {
 		"T: int, double, ?",
 		"U: int, double, ?"
+	}, exclusions = {
+			@Exclusion({"T: int", "U: double"}) // TODO: not implemented
 	})
 	public static class Pair<T, U> {
 		public final T first;
@@ -66,6 +68,13 @@ public class Example<Q> {
 	@Specialize("T: int, float")
 	public static <T> T someProcess(final AtomicValue<T> i, final AtomicValue<$int> p) {
 		return i.getValue() + p.getValue();
+	}
+	
+	public static String sum(final String[] values) {
+		final StringBuilder builder = new StringBuilder();
+		for (final String value : values)
+			builder.append(value);
+		return builder.toString();
 	}
 
 	@Specialize("T: int, float")

@@ -15,12 +15,7 @@ import net.thisptr.specialize.processor.internal.javac.JavacProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-// TODO: 型パラメータに含まれるものを特殊化するときはspecialize,
-// それ以外のところを埋めるだけなのはinjectのバリデーション
 
-// TODO: 最後にimportを削除する
-
-// @SupportedSourceVersion(SourceVersion.RELEASE_6)
 @SupportedAnnotationTypes("*")
 public class SpecializeProcessor extends AbstractProcessor {
 	private static Logger log = LoggerFactory.getLogger(SpecializeProcessor.class);

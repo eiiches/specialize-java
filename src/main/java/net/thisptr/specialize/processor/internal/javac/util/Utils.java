@@ -8,13 +8,14 @@ import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
 
+import net.thisptr.specialize.processor.internal.IOUtils;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.sun.tools.javac.code.Symtab;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.tree.JCTree;
-import com.sun.tools.javac.tree.JCTree.JCNewClass;
 import com.sun.tools.javac.tree.Pretty;
 import com.sun.tools.javac.tree.TreeCopier;
 import com.sun.tools.javac.tree.TreeMaker;
@@ -23,23 +24,17 @@ import com.sun.tools.javac.util.Context;
 public class Utils {
 	private static Logger log = LoggerFactory.getLogger(Utils.class);
 
-	public static String debug(final JCTree tree) {
-		if (tree instanceof JCNewClass) {
-			return null;
-		} else {
-			return tree.toString();
-		}
-	}
-
 	public static <T extends JCTree> T copyTree(final Context context, final T tree) {
 		return (T) new TreeCopier<Void>(TreeMaker.instance(context)).copy(tree);
 	}
 
 	public static void dumpSource(final File file, final JCTree tree) throws IOException {
-		try (final FileWriter writer = new FileWriter(file)) {
+		final FileWriter writer = new FileWriter(file);
+		try {
 			tree.accept(new Pretty(writer, true));
+		} finally {
+			IOUtils.closeQuietly(writer);
 		}
-
 	}
 
 	public static Type toType(final Context context, final String type) {
@@ -75,6 +70,6 @@ public class Utils {
 	}
 
 	public static <T> com.sun.tools.javac.util.List<T> emptyImmutableList() {
-		return toImmutableList();
+		return com.sun.tools.javac.util.List.<T>nil();
 	}
 }

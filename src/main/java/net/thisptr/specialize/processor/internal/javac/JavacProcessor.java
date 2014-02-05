@@ -21,6 +21,7 @@ import javax.tools.Diagnostic.Kind;
 import javax.tools.JavaFileObject;
 
 import net.thisptr.specialize.Specialize;
+import net.thisptr.specialize.processor.internal.IOUtils;
 import net.thisptr.specialize.processor.internal.InjectInfo;
 import net.thisptr.specialize.processor.internal.SpecializeInfo;
 import net.thisptr.specialize.processor.internal.javac.util.Modifications;
@@ -263,7 +264,7 @@ public class JavacProcessor extends AbstractProcessor {
 			} else if (annotated instanceof JCClassDecl && enclosure instanceof JCClassDecl) {
 				final JCClassDecl classDecl = (JCClassDecl) annotated;
 				final JCClassDecl enclosureDecl = (JCClassDecl) enclosure;
-
+				
 				final List<JCTree> defs = Utils.toMutableList(enclosureDecl.defs);
 
 				defs.addAll(specializeClassDef(context, classDecl, specializeInfo));
@@ -280,7 +281,8 @@ public class JavacProcessor extends AbstractProcessor {
 					try {
 						for (final JCClassDecl specialized : specializeClassDef(context, classDecl, specializeInfo)) {
 							final JavaFileObject specializedSource = processingEnv.getFiler().createSourceFile(unit.packge.toString() + "." + specialized.name);
-							try (final Writer writer = specializedSource.openWriter()) {
+							final Writer writer = specializedSource.openWriter();
+							try {
 								final JCCompilationUnit copyUnit = Utils.copyTree(context, unit);
 
 								// exclude top level classes, keeping import statements, etc.
@@ -294,6 +296,8 @@ public class JavacProcessor extends AbstractProcessor {
 								copyUnit.defs = Utils.toImmutableList(defs);
 
 								copyUnit.accept(new Pretty(writer, true));
+							} finally {
+								IOUtils.closeQuietly(writer);
 							}
 						}
 						Modifications.removeAnnotation(classDecl, Specialize.class);

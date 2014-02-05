@@ -23,7 +23,6 @@ import javax.tools.StandardLocation;
 
 import net.thisptr.specialize.processor.SpecializeProcessor;
 
-import org.junit.experimental.theories.DataPoints;
 import org.junit.experimental.theories.Theories;
 import org.junit.experimental.theories.Theory;
 import org.junit.runner.RunWith;
@@ -33,13 +32,10 @@ import org.slf4j.LoggerFactory;
 
 @RunWith(Theories.class)
 public abstract class AbstractProcessorTest {
+	@SuppressWarnings("unused")
 	private static Logger log = LoggerFactory.getLogger(AbstractProcessorTest.class);
-	private static Logger rlog = LoggerFactory.getLogger("RAW");
 
-	@DataPoints
-	public static String[] classNames = new String[] {
-		"net.thisptr.specialize.example.Example",
-	};
+	private static Logger rlog = LoggerFactory.getLogger("RAW");
 
 	@Theory
 	public void testCompile(final JavaCompiler compiler, final String className) throws IOException {
