@@ -9,12 +9,10 @@ import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.TypeElement;
 
-import net.thisptr.specialize.processor.internal.eclipse.EclipseProcessor;
 import net.thisptr.specialize.processor.internal.javac.JavacProcessor;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 @SupportedAnnotationTypes("*")
 public class SpecializeProcessor extends AbstractProcessor {
@@ -34,7 +32,8 @@ public class SpecializeProcessor extends AbstractProcessor {
 		super.init(processingEnv);
 
 		if (processingEnv.getClass().getName().startsWith("org.eclipse.jdt.")) {
-			processor = new EclipseProcessor();
+			// processor = new EclipseProcessor();
+			log.error("Unsupported compiler: {}", processingEnv.getClass().getName());
 		} else if (processingEnv.getClass().getName().startsWith("com.sun.tools.javac.processing.JavacProcessingEnvironment")) {
 			processor = new JavacProcessor();
 		} else {
