@@ -2,7 +2,6 @@ package net.thisptr.specialize.example;
 
 // these imports will be removed after specialization
 import net.thisptr.specialize.Specialize;
-import net.thisptr.specialize.Exclusion;
 
 @Specialize({"Q: int, ?"})
 public class Example<Q> {
@@ -10,8 +9,6 @@ public class Example<Q> {
 	@Specialize(value = {
 		"T: int, double, ?",
 		"U: int, double, ?"
-	}, exclusions = {
-			@Exclusion({"T: int", "U: double"}) // TODO: not implemented
 	})
 	public static class Pair<T, U> {
 		public final T first;

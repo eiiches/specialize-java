@@ -9,5 +9,4 @@ import java.lang.annotation.Target;
 @Target({ElementType.TYPE, ElementType.METHOD})
 public @interface Specialize {
 	String[] value();
-	Exclusion[] exclusions() default {};
 }
