@@ -3,22 +3,21 @@ package net.thisptr.specialize.processor;
 import java.util.Set;
 
 import javax.annotation.processing.AbstractProcessor;
+import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.TypeElement;
+import javax.tools.Diagnostic.Kind;
 
 import net.thisptr.specialize.processor.internal.javac.JavacProcessor;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @SupportedAnnotationTypes("*")
 public class SpecializeProcessor extends AbstractProcessor {
-	private static Logger log = LoggerFactory.getLogger(SpecializeProcessor.class);
-
 	private AbstractProcessor processor = null;
+	private Messager messager = null;
 
 	@Override
 	public boolean process(final Set<? extends TypeElement> annotations, final RoundEnvironment roundEnv) {
@@ -30,14 +29,15 @@ public class SpecializeProcessor extends AbstractProcessor {
 	@Override
 	public synchronized void init(final ProcessingEnvironment processingEnv) {
 		super.init(processingEnv);
+		messager = processingEnv.getMessager();
 
 		if (processingEnv.getClass().getName().startsWith("org.eclipse.jdt.")) {
 			// processor = new EclipseProcessor();
-			log.error("Unsupported compiler: {}", processingEnv.getClass().getName());
+			messager.printMessage(Kind.WARNING, String.format("Your compiler (%s) is not supported by specialize-java. Specializations will not be performed.", processingEnv.getClass().getCanonicalName()));
 		} else if (processingEnv.getClass().getName().startsWith("com.sun.tools.javac.processing.JavacProcessingEnvironment")) {
 			processor = new JavacProcessor();
 		} else {
-			log.error("Unsupported compiler: {}", processingEnv.getClass().getName());
+			messager.printMessage(Kind.WARNING, String.format("Your compiler (%s) is not supported by specialize-java. Specializations will not be performed.", processingEnv.getClass().getCanonicalName()));
 		}
 
 		if (processor != null)

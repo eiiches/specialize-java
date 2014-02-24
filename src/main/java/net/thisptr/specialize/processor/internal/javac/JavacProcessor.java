@@ -27,9 +27,6 @@ import net.thisptr.specialize.processor.internal.SpecializeInfo;
 import net.thisptr.specialize.processor.internal.javac.util.Modifications;
 import net.thisptr.specialize.processor.internal.javac.util.Utils;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.sun.source.tree.Tree;
 import com.sun.source.util.Trees;
 import com.sun.tools.javac.code.Flags;
@@ -53,8 +50,6 @@ import com.sun.tools.javac.util.Names;
 
 @SupportedAnnotationTypes("*")
 public class JavacProcessor extends AbstractProcessor {
-	private static Logger log = LoggerFactory.getLogger(JavacProcessor.class);
-
 	private static String[] primitiveTypes = new String[] {
 			"int", "short", "char", "byte", "long", "float", "double", "boolean"
 	};
@@ -65,7 +60,7 @@ public class JavacProcessor extends AbstractProcessor {
 			dollaredTypes.put("$" + primitiveType, primitiveType);
 	}
 
-	private static <T extends JCTree> T injectPrimitive(final Context context, final T tree, final InjectInfo injectInfo) {
+	private <T extends JCTree> T injectPrimitive(final Context context, final T tree, final InjectInfo injectInfo) {
 		final TreeMaker treeMaker = TreeMaker.instance(context);
 		final Names names = Names.instance(context);
 
@@ -98,7 +93,7 @@ public class JavacProcessor extends AbstractProcessor {
 						visitTypeApply((JCTypeApply) argument);
 						arguments.add((JCTypeApply) result);
 					} else {
-						log.error("Unhandled TypeApply argument type: {}[{}]", argument.toString(), argument.getClass());
+						messager.printMessage(Kind.WARNING, String.format("Unhandled TypeApply argument type: %s[%s]", argument.toString(), argument.getClass()));
 						arguments.add(argument);
 					}
 				}
@@ -111,7 +106,7 @@ public class JavacProcessor extends AbstractProcessor {
 	}
 
 	// TODO: verify type parameters in method signature.
-	private static List<JCMethodDecl> specializeMethodDef(final Context context, final JCMethodDecl methodDecl, final SpecializeInfo specializeInfo) {
+	private List<JCMethodDecl> specializeMethodDef(final Context context, final JCMethodDecl methodDecl, final SpecializeInfo specializeInfo) {
 		final List<JCMethodDecl> result = new ArrayList<JCMethodDecl>();
 
 		for (final InjectInfo injectInfo : specializeInfo.getTypeCombinations()) {
@@ -136,7 +131,7 @@ public class JavacProcessor extends AbstractProcessor {
 	}
 
 	// TODO: verify type parameters in class signature.
-	private static List<JCClassDecl> specializeClassDef(final Context context, final JCClassDecl classDecl, final SpecializeInfo specializeInfo) {
+	private List<JCClassDecl> specializeClassDef(final Context context, final JCClassDecl classDecl, final SpecializeInfo specializeInfo) {
 		final Names names = Names.instance(context);
 
 		final List<JCClassDecl> result = new ArrayList<JCClassDecl>();
@@ -148,7 +143,7 @@ public class JavacProcessor extends AbstractProcessor {
 			final StringBuilder specializedName = new StringBuilder(classDecl.name.toString() + "$specialized");
 			final List<JCTypeParameter> genericArguments = new ArrayList<JCTypeParameter>();
 
-			for (final JCTypeParameter typaram: classDecl.typarams) {
+			for (final JCTypeParameter typaram : classDecl.typarams) {
 				if (injectInfo.contains(typaram.toString())) {
 					final InjectInfo.TypeParam typeParam = injectInfo.get(typaram.toString());
 					specializedName.append("$" + typeParam.type);
@@ -170,7 +165,7 @@ public class JavacProcessor extends AbstractProcessor {
 		return result;
 	}
 
-	private static JCExpression specializeTypeApply(final Context context, final JCTypeApply typeApply) {
+	private JCExpression specializeTypeApply(final Context context, final JCTypeApply typeApply) {
 		final TreeMaker treeMaker = TreeMaker.instance(context);
 		final Names names = Names.instance(context);
 
@@ -182,7 +177,7 @@ public class JavacProcessor extends AbstractProcessor {
 			specializedName.append(((JCIdent) typeApply.clazz).toString());
 			specializedName.append("$specialized");
 		} else {
-			log.error("Unhandled typeApply.clazz: {}[{}]", typeApply.clazz, typeApply.clazz.getClass());
+			messager.printMessage(Kind.WARNING, String.format("Unhandled typeApply.clazz: %s[%s]", typeApply.clazz, typeApply.clazz.getClass()));
 		}
 
 		final List<JCExpression> genericArguments = new ArrayList<JCExpression>();
@@ -210,7 +205,7 @@ public class JavacProcessor extends AbstractProcessor {
 		} else if (typeApply.clazz instanceof JCIdent) {
 			((JCIdent) specializedClass).name = names.fromString(specializedName.toString());
 		} else {
-			log.error("Unhandled typeApply.clazz: {}[{}]", typeApply.clazz, typeApply.clazz.getClass());
+			messager.printMessage(Kind.WARNING, String.format("Unhandled typeApply.clazz: %s[%s]", typeApply.clazz, typeApply.clazz.getClass()));
 		}
 
 		if (genericArguments.isEmpty()) {
@@ -240,7 +235,7 @@ public class JavacProcessor extends AbstractProcessor {
 		// Specialize
 		for (final Element element : roundEnv.getElementsAnnotatedWith(Specialize.class)) {
 			final Specialize annotation = element.getAnnotation(Specialize.class);
-			log.info("annotation: {}", annotation);
+			messager.printMessage(Kind.NOTE, String.format("Processing %s", annotation), element);
 
 			final SpecializeInfo specializeInfo = SpecializeInfo.parse(annotation);
 
@@ -264,7 +259,7 @@ public class JavacProcessor extends AbstractProcessor {
 			} else if (annotated instanceof JCClassDecl && enclosure instanceof JCClassDecl) {
 				final JCClassDecl classDecl = (JCClassDecl) annotated;
 				final JCClassDecl enclosureDecl = (JCClassDecl) enclosure;
-				
+
 				final List<JCTree> defs = Utils.toMutableList(enclosureDecl.defs);
 
 				defs.addAll(specializeClassDef(context, classDecl, specializeInfo));
@@ -302,7 +297,6 @@ public class JavacProcessor extends AbstractProcessor {
 						}
 						Modifications.removeAnnotation(classDecl, Specialize.class);
 					} catch (IOException e) {
-						log.error("Cannot open source file for writing.");
 						throw new RuntimeException(e);
 					}
 
@@ -321,7 +315,7 @@ public class JavacProcessor extends AbstractProcessor {
 					unit.defs = Utils.toImmutableList(defs);
 				}
 			} else {
-				log.error("Unhandled, enclosure: {}, element: {}", enclosure.getClass(), annotated.getClass());
+				messager.printMessage(Kind.WARNING, String.format("Unhandled, enclosure: %s, element: %s", enclosure.getClass(), annotated.getClass()), element.getEnclosingElement());
 			}
 
 			changedUnits.add(unit);
@@ -348,7 +342,7 @@ public class JavacProcessor extends AbstractProcessor {
 							continue;
 						imports.put(className, imp);
 					} else {
-						log.error("Unhandled imp.qualid: {}[{}]", imp.qualid, imp.qualid.getClass());
+						messager.printMessage(Kind.WARNING, String.format("Unhandled imp.qualid: %s[%s]", imp.qualid, imp.qualid.getClass()));
 					}
 				}
 
@@ -363,7 +357,7 @@ public class JavacProcessor extends AbstractProcessor {
 				public void visitTypeApply(final JCTypeApply tree) {
 					result = specializeTypeApply(context, tree);
 					if (result != tree) {
-						log.info("Rewrite {} to {}.", tree, result);
+						messager.printMessage(Kind.NOTE, String.format("Rewriting %s to %s", tree, result));
 
 						// add import if needed
 						if (tree.clazz instanceof JCFieldAccess) {
@@ -381,13 +375,13 @@ public class JavacProcessor extends AbstractProcessor {
 									((JCFieldAccess) specializedImp.qualid).name = ((JCIdent) result).name;
 									importsToAdd.put(specializedImp.qualid.toString(), specializedImp);
 								} else {
-									log.error("Unhandled result: {}[{}]", result, result.getClass());
+									messager.printMessage(Kind.WARNING, String.format("Unhandled result: %s[%s]", result, result.getClass()));
 								}
 
-								log.info("Added {}", specializedImp);
+								messager.printMessage(Kind.NOTE, "Added " + specializedImp.toString());
 							}
 						} else {
-							log.error("Unhandled tree.clazz: {}[{}]", tree.clazz, tree.clazz.getClass());
+							messager.printMessage(Kind.WARNING, String.format("Unhandled tree.clazz: %s[%s]", tree.clazz, tree.clazz.getClass()));
 						}
 
 						isChanged[0] = true;
@@ -426,8 +420,9 @@ public class JavacProcessor extends AbstractProcessor {
 			try {
 				Utils.dumpSource(out, unit);
 			} catch (IOException e) {
-				log.warn("Cannot write to {}.", out);
-			};
+				messager.printMessage(Kind.WARNING, String.format("Cannot write to %s", out));
+			}
+			;
 		}
 
 		return true;

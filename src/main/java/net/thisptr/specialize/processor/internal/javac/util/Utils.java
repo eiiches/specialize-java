@@ -10,9 +10,6 @@ import java.util.List;
 
 import net.thisptr.specialize.processor.internal.IOUtils;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.sun.tools.javac.code.Symtab;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.tree.JCTree;
@@ -22,8 +19,6 @@ import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.util.Context;
 
 public class Utils {
-	private static Logger log = LoggerFactory.getLogger(Utils.class);
-
 	public static <T extends JCTree> T copyTree(final Context context, final T tree) {
 		return (T) new TreeCopier<Void>(TreeMaker.instance(context)).copy(tree);
 	}
@@ -49,7 +44,6 @@ public class Utils {
 		if ("float".equals(type)) return  symtab.floatType;
 		if ("double".equals(type)) return  symtab.doubleType;
 
-		log.error("Unhandled class type: {}", type);
 		return null;
 	}
 
