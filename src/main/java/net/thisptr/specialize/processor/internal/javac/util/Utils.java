@@ -35,14 +35,22 @@ public class Utils {
 	public static Type toType(final Context context, final String type) {
 		final Symtab symtab = Symtab.instance(context);
 
-		if ("int".equals(type)) return  symtab.intType;
-		if ("short".equals(type)) return  symtab.shortType;
-		if ("long".equals(type)) return  symtab.longType;
-		if ("byte".equals(type)) return  symtab.byteType;
-		if ("char".equals(type)) return  symtab.charType;
-		if ("boolean".equals(type)) return  symtab.booleanType;
-		if ("float".equals(type)) return  symtab.floatType;
-		if ("double".equals(type)) return  symtab.doubleType;
+		if ("int".equals(type))
+			return symtab.intType;
+		if ("short".equals(type))
+			return symtab.shortType;
+		if ("long".equals(type))
+			return symtab.longType;
+		if ("byte".equals(type))
+			return symtab.byteType;
+		if ("char".equals(type))
+			return symtab.charType;
+		if ("boolean".equals(type))
+			return symtab.booleanType;
+		if ("float".equals(type))
+			return symtab.floatType;
+		if ("double".equals(type))
+			return symtab.doubleType;
 
 		return null;
 	}
@@ -64,6 +72,6 @@ public class Utils {
 	}
 
 	public static <T> com.sun.tools.javac.util.List<T> emptyImmutableList() {
-		return com.sun.tools.javac.util.List.<T>nil();
+		return com.sun.tools.javac.util.List.<T> nil();
 	}
 }

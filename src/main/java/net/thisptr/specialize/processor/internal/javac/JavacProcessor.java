@@ -24,7 +24,9 @@ import net.thisptr.specialize.Specialize;
 import net.thisptr.specialize.processor.internal.IOUtils;
 import net.thisptr.specialize.processor.internal.InjectInfo;
 import net.thisptr.specialize.processor.internal.SpecializeInfo;
+import net.thisptr.specialize.processor.internal.javac.util.AstEditor;
 import net.thisptr.specialize.processor.internal.javac.util.Modifications;
+import net.thisptr.specialize.processor.internal.javac.util.UnhandledSyntaxException;
 import net.thisptr.specialize.processor.internal.javac.util.Utils;
 
 import com.sun.source.tree.Tree;
@@ -329,100 +331,62 @@ public class JavacProcessor extends AbstractProcessor {
 			if (unit.getSourceFile().getKind() != JavaFileObject.Kind.SOURCE)
 				continue;
 
-			final boolean[] isChanged = new boolean[] { false };
-
-			// list imports (by <class name, import statement> pairs)
-			final Map<String, JCImport> imports = new HashMap<String, JCImport>();
-			for (final JCTree tree : unit.defs)
-				if (tree instanceof JCImport) {
-					final JCImport imp = (JCImport) tree;
-					if (imp.qualid instanceof JCFieldAccess) {
-						final String className = ((JCFieldAccess) imp.qualid).name.toString();
-						if (className.equals("*"))
-							continue;
-						imports.put(className, imp);
-					} else {
-						messager.printMessage(Kind.WARNING, String.format("Unhandled imp.qualid: %s[%s]", imp.qualid, imp.qualid.getClass()));
-					}
-				}
-
-			final Map<String, JCTree> importsToAdd = new HashMap<String, JCTree>();
-
-			// if an original class is imported by wildcard,
-			// then the specialized class is automatically imported.
+			final AstEditor editor = new AstEditor(unit);
 
 			// specialize type names
 			unit.accept(new TreeTranslator() {
 				@Override
 				public void visitTypeApply(final JCTypeApply tree) {
+					// specialize type name if needed
 					result = specializeTypeApply(context, tree);
-					if (result != tree) {
-						messager.printMessage(Kind.NOTE, String.format("Rewriting %s to %s", tree, result));
+					// the instance is returned untouched if the type does not need specialization
+					if (result == tree)
+						return;
 
-						// add import if needed
-						if (tree.clazz instanceof JCFieldAccess) {
-							// if tree.clazz is a fully qualified JCFieldAccess,
-							// then no imports should be added. just making this explicit here.
-						} else if (tree.clazz instanceof JCIdent) {
-							if (imports.containsKey(tree.clazz.toString())) {
-								final JCImport imp = imports.get(tree.clazz.toString());
+					messager.printMessage(Kind.NOTE, String.format("Rewriting %s to %s", tree, result));
 
-								final JCImport specializedImp = Utils.copyTree(context, imp);
-								if (result instanceof JCTypeApply) {
-									((JCFieldAccess) specializedImp.qualid).name = ((JCIdent) ((JCTypeApply) result).clazz).name;
-									importsToAdd.put(specializedImp.qualid.toString(), specializedImp);
-								} else if (result instanceof JCIdent) {
-									((JCFieldAccess) specializedImp.qualid).name = ((JCIdent) result).name;
-									importsToAdd.put(specializedImp.qualid.toString(), specializedImp);
-								} else {
-									messager.printMessage(Kind.WARNING, String.format("Unhandled result: %s[%s]", result, result.getClass()));
-								}
-
-								messager.printMessage(Kind.NOTE, "Added " + specializedImp.toString());
+					// add import if needed
+					if (tree.clazz instanceof JCFieldAccess) {
+						// nothing to do, because tree.clazz is a fully qualified type (with package name)
+					} else if (tree.clazz instanceof JCIdent) {
+						final List<JCImport> imports = editor.findImport(tree.clazz.toString());
+						if (!imports.isEmpty()) {
+							if (result instanceof JCTypeApply) {
+								final JCImport specializedImp = Utils.copyTree(context, imports.get(0));
+								((JCFieldAccess) specializedImp.qualid).name = ((JCIdent) ((JCTypeApply) result).clazz).name;
+								editor.prependImport(specializedImp);
+								messager.printMessage(Kind.NOTE, "Import added: " + specializedImp.toString());
+							} else if (result instanceof JCIdent) {
+								final JCImport specializedImp = Utils.copyTree(context, imports.get(0));
+								((JCFieldAccess) specializedImp.qualid).name = ((JCIdent) result).name;
+								editor.prependImport(specializedImp);
+								messager.printMessage(Kind.NOTE, "Import added: " + specializedImp.toString());
+							} else {
+								throw new UnhandledSyntaxException(result);
 							}
 						} else {
-							messager.printMessage(Kind.WARNING, String.format("Unhandled tree.clazz: %s[%s]", tree.clazz, tree.clazz.getClass()));
+							// in this case, the class seems to be imported using wildcard, or the class is in the same package, which means,
+							// there is no need to explicitly import the specialized class.
 						}
-
-						isChanged[0] = true;
+					} else {
+						throw new UnhandledSyntaxException(tree);
 					}
+
+					editor.setModified(true);
 				}
 			});
 
-			unit.defs = unit.defs.prependList(Utils.toImmutableList(importsToAdd.values()));
+			editor.removeImport(Specialize.class);
+			editor.removeWildcardImport(Specialize.class.getPackage());
 
-			if (isChanged[0])
-				changedUnits.add(unit);
-		}
-
-		for (final Element rootElement : roundEnv.getRootElements()) {
-			final JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(rootElement).getCompilationUnit();
-
-			// ignore other than sources
-			if (unit.getSourceFile().getKind() != JavaFileObject.Kind.SOURCE)
-				continue;
-
-			Modifications.removeNonStaticImport(unit, Specialize.class);
-			Modifications.removeNonStaticStarImport(unit, Specialize.class.getPackage());
-		}
-
-		// dump specialized sources
-		for (final Element rootElement : roundEnv.getRootElements()) {
-			final JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(rootElement).getCompilationUnit();
-			if (!changedUnits.contains(unit))
-				continue;
-
-			// ignore other than sources
-			if (unit.getSourceFile().getKind() != JavaFileObject.Kind.SOURCE)
-				continue;
-
-			final File out = new File(unit.sourcefile.getName() + ".specialized");
-			try {
-				Utils.dumpSource(out, unit);
-			} catch (IOException e) {
-				messager.printMessage(Kind.WARNING, String.format("Cannot write to %s", out));
+			if (editor.isModified()) {
+				final File out = new File(unit.sourcefile.getName() + ".specialized");
+				try {
+					Utils.dumpSource(out, unit);
+				} catch (IOException e) {
+					messager.printMessage(Kind.WARNING, String.format("Cannot write to %s", out));
+				}
 			}
-			;
 		}
 
 		return true;
