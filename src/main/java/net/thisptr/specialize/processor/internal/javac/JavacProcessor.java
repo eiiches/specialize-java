@@ -3,7 +3,6 @@ package net.thisptr.specialize.processor.internal.javac;
 import java.io.File;
 import java.io.IOException;
 import java.io.Writer;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -289,7 +288,11 @@ public class JavacProcessor extends AbstractProcessor {
 				if ((classDecl.mods.flags & Flags.PUBLIC) != 0) { // then the class is principal top level.
 					try {
 						for (final JCClassDecl specialized : specializeClassDef(context, classDecl, specializeInfo)) {
-							final JavaFileObject specializedSource = processingEnv.getFiler().createSourceFile(unit.packge.toString() + "." + specialized.name);
+							final String name = "unnamed package".equals(unit.packge.toString())
+									? specialized.name.toString()
+									: unit.packge.toString() + "." + specialized.name.toString();
+
+							final JavaFileObject specializedSource = processingEnv.getFiler().createSourceFile(name);
 							final Writer writer = specializedSource.openWriter();
 							try {
 								final JCCompilationUnit copyUnit = Utils.copyTree(context, unit);
