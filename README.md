@@ -29,7 +29,7 @@ Usage
 
 #### Example
 
-Let's try by a simple example. This Array class (can be a top-level or inner class) with @Specialize annotation,
+Let's see a simple example. This Array class (can be a top-level or inner class) with @Specialize annotation,
 
 ```java
 import net.thisptr.specialize.Specialize;
@@ -46,8 +46,7 @@ public class Array<T> {
 }
 ```
 
-compiles to the three classes:
-
+compiles to the three classes (by running `javac -cp specialize-java.jar Array.java` or `mvn compile` if you have pom.xml):
 
 ```java
 public class Array$specialized$int {
@@ -157,3 +156,7 @@ This does not compile currently.
 ```java
 Array<$int> a = new Array<>(10)
 ```
+
+#### Eclipse compiler (ecj)
+
+Eclipse compiler (ecj) is not supported.
