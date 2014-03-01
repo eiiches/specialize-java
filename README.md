@@ -143,6 +143,11 @@ TBD
 - specialize-java-rt
 
 
+Projects using this library
+---------------------------
+
+- [ml4j-strings](https://github.com/eiiches/ml4j-strings) - A set of string algorithms in java
+
 Limitations
 -----------
 
