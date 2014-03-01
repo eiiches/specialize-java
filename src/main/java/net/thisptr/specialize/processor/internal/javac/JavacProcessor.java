@@ -3,6 +3,7 @@ package net.thisptr.specialize.processor.internal.javac;
 import java.io.File;
 import java.io.IOException;
 import java.io.Writer;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,6 +31,7 @@ import net.thisptr.specialize.processor.internal.javac.util.UnhandledSyntaxExcep
 import net.thisptr.specialize.processor.internal.javac.util.Utils;
 
 import com.sun.source.tree.Tree;
+import com.sun.source.util.TreePath;
 import com.sun.source.util.Trees;
 import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.processing.JavacProcessingEnvironment;
@@ -179,7 +181,7 @@ public class JavacProcessor extends AbstractProcessor {
 			specializedName.append(((JCIdent) typeApply.clazz).toString());
 			specializedName.append("$specialized");
 		} else {
-			messager.printMessage(Kind.WARNING, String.format("Unhandled typeApply.clazz: %s[%s]", typeApply.clazz, typeApply.clazz.getClass()));
+			throw new UnhandledSyntaxException(typeApply);
 		}
 
 		final List<JCExpression> genericArguments = new ArrayList<JCExpression>();
@@ -207,7 +209,7 @@ public class JavacProcessor extends AbstractProcessor {
 		} else if (typeApply.clazz instanceof JCIdent) {
 			((JCIdent) specializedClass).name = names.fromString(specializedName.toString());
 		} else {
-			messager.printMessage(Kind.WARNING, String.format("Unhandled typeApply.clazz: %s[%s]", typeApply.clazz, typeApply.clazz.getClass()));
+			throw new UnhandledSyntaxException(typeApply);
 		}
 
 		if (genericArguments.isEmpty()) {
@@ -222,12 +224,22 @@ public class JavacProcessor extends AbstractProcessor {
 
 	private Messager messager;
 
+	public static void info(final JCCompilationUnit unit, final String format, final Object... args) {
+		final File base = new File(System.getProperty("user.dir"));
+
+		File src = new File(unit.sourcefile.getName());
+		if (src.getPath().startsWith(base.getPath() + "/"))
+			src = new File(src.getPath().substring(base.getPath().length() + 1));
+
+		System.out.println("[specialize-java] " + src.getPath() + ": " + String.format(format, args));
+	}
+
 	@Override
 	public boolean process(final Set<? extends TypeElement> annotations, final RoundEnvironment roundEnv) {
 		if (roundEnv.processingOver())
 			return true;
 
-		messager.printMessage(Kind.NOTE, "Running specialize-java.");
+		messager.printMessage(Kind.WARNING, "Running specialize-java.");
 
 		final JavacProcessingEnvironment javacProcessingEnv = (JavacProcessingEnvironment) processingEnv;
 		final Trees trees = Trees.instance(processingEnv);
@@ -325,13 +337,34 @@ public class JavacProcessor extends AbstractProcessor {
 
 		// Specialize type apply
 		for (final Element rootElement : roundEnv.getRootElements()) {
-			final JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(rootElement).getCompilationUnit();
+			final TreePath rootElementPath = trees.getPath(rootElement);
+			if (rootElementPath == null) // e.g. package-info.java
+				continue;
+
+			final JCCompilationUnit unit = (JCCompilationUnit) rootElementPath.getCompilationUnit();
 
 			// ignore other than sources
 			if (unit.getSourceFile().getKind() != JavaFileObject.Kind.SOURCE)
 				continue;
 
-			final AstEditor editor = new AstEditor(unit);
+			final AstEditor editor = new AstEditor(context, unit);
+			final List<String> pendingImports = new ArrayList<String>();
+
+			// specialize-java-rt support
+			for (final JCImport imp : editor.findImport("*")) {
+				final String packageName = ((JCFieldAccess) imp.qualid).selected.toString(); // FIXME do not use toString
+				if (packageName.startsWith("java.")) {
+					try {
+						final Package pkg = getClass().getClassLoader().loadClass("net.thisptr.specialize." + packageName + ".package-info").getPackage();
+						if (pkg != null) {
+							info(unit, "%s --> %s (copy import)", packageName + ".*", pkg.toString() + ".*");
+							pendingImports.add(pkg.toString() + ".*");
+						}
+					} catch (ClassNotFoundException e) {
+						e.printStackTrace();
+					}
+				}
+			}
 
 			// specialize type names
 			unit.accept(new TreeTranslator() {
@@ -351,19 +384,32 @@ public class JavacProcessor extends AbstractProcessor {
 					} else if (tree.clazz instanceof JCIdent) {
 						final List<JCImport> imports = editor.findImport(tree.clazz.toString());
 						if (!imports.isEmpty()) {
+							final JCImport unspecializedImport = imports.get(0);
+
+							String className = null;
 							if (result instanceof JCTypeApply) {
-								final JCImport specializedImp = Utils.copyTree(context, imports.get(0));
-								((JCFieldAccess) specializedImp.qualid).name = ((JCIdent) ((JCTypeApply) result).clazz).name;
-								editor.prependImport(specializedImp);
-								messager.printMessage(Kind.NOTE, "Import added: " + specializedImp.toString());
+								className = ((JCIdent) ((JCTypeApply) result).clazz).name.toString();
 							} else if (result instanceof JCIdent) {
-								final JCImport specializedImp = Utils.copyTree(context, imports.get(0));
-								((JCFieldAccess) specializedImp.qualid).name = ((JCIdent) result).name;
-								editor.prependImport(specializedImp);
-								messager.printMessage(Kind.NOTE, "Import added: " + specializedImp.toString());
+								className = ((JCIdent) result).name.toString();
 							} else {
 								throw new UnhandledSyntaxException(result);
 							}
+
+							String packageName = null;
+							if (unspecializedImport.qualid.toString().startsWith("java.")) {
+								try {
+									final String tmp = "net.thisptr.specialize." + ((JCFieldAccess) unspecializedImport.qualid).selected.toString();
+									packageName = getClass().getClassLoader().loadClass(tmp + "." + className).getPackage().getName();
+								} catch (ClassNotFoundException e) {
+									e.printStackTrace();
+									throw new RuntimeException("The specializations of the class are not defined. Maybe specializa-java-rt is missing in your classpath?", e);
+								}
+							} else {
+								packageName = ((JCFieldAccess) unspecializedImport.qualid).selected.toString();
+							}
+
+							info(unit, "%s --> %s (copy import)", unspecializedImport.qualid, packageName + "." + className);
+							pendingImports.add(packageName + "." + className);
 						} else {
 							// in this case, the class seems to be imported using wildcard, or the class is in the same package, which means,
 							// there is no need to explicitly import the specialized class.
@@ -376,8 +422,10 @@ public class JavacProcessor extends AbstractProcessor {
 				}
 			});
 
-			editor.removeImport(Specialize.class);
-			editor.removeWildcardImport(Specialize.class.getPackage());
+			for (final String pendingImport : pendingImports)
+				editor.prependImport(pendingImport);
+			editor.removeImports(Specialize.class);
+			editor.removeWildcardImports(Specialize.class.getPackage());
 
 			if (editor.isModified()) {
 				final File out = new File(unit.sourcefile.getName() + ".specialized");

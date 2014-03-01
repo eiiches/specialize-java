@@ -1,13 +1,19 @@
 package net.thisptr.specialize.processor.internal.javac.util;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
+import com.sun.tools.javac.tree.JCTree.JCExpression;
 import com.sun.tools.javac.tree.JCTree.JCFieldAccess;
 import com.sun.tools.javac.tree.JCTree.JCImport;
+import com.sun.tools.javac.tree.TreeMaker;
+import com.sun.tools.javac.util.Context;
+import com.sun.tools.javac.util.Name;
+import com.sun.tools.javac.util.Names;
 
 public class AstEditor {
 
@@ -24,10 +30,16 @@ public class AstEditor {
 	private JCCompilationUnit unit;
 	private LinkedList<JavaImport> imports;
 	private boolean modified = false;
+	private Context context;
+	private TreeMaker make;
+	private Names names;
 
-	public AstEditor(final JCCompilationUnit unit) {
+	public AstEditor(final Context context, final JCCompilationUnit unit) {
+		this.context = context;
 		this.unit = unit;
 		this.imports = parseImports(unit);
+		this.make = TreeMaker.instance(context);
+		this.names = Names.instance(context);
 	}
 
 	private static JavaImport parseImport(final JCImport imp) {
@@ -56,19 +68,36 @@ public class AstEditor {
 		return result;
 	}
 
+	public void prependWildcardImport(final Package pkg) {
+		prependImport(pkg.getName() + ".*");
+	}
+
+	public void prependImport(final String pkg) {
+		final LinkedList<String> hierarchy = new LinkedList<String>(Arrays.asList(pkg.split("\\.")));
+
+		JCExpression head = make.Ident(names.fromString(hierarchy.removeFirst()));
+		while (!hierarchy.isEmpty())
+			head = make.Select(head, names.fromString(hierarchy.removeFirst()));
+
+		prependImport(make.Import(head, false));
+	}
+
+	public void prependImport(final Class<?> cls) {
+		prependImport(cls.getName());
+	}
+
 	public void prependImport(final JCImport specializedImp) {
-		final JavaImport jimp = parseImport(specializedImp);
-		unit.defs.prepend(specializedImp);
-		imports.addFirst(jimp);
+		unit.defs = unit.defs.prepend(specializedImp);
+		imports.addFirst(parseImport(specializedImp));
 		modified = true;
 	}
 
-	public void removeWildcardImport(final Package packge) {
+	public void removeWildcardImports(final Package pkg) {
 		final List<JCTree> defs = new ArrayList<JCTree>();
 		for (final JCTree tree : unit.defs) {
 			if (tree instanceof JCImport) {
 				final JCImport imp = (JCImport) tree;
-				if (!imp.staticImport && (packge.getName() + ".*").equals(imp.qualid.toString()))
+				if (!imp.staticImport && (pkg.getName() + ".*").equals(imp.qualid.toString()))
 					continue;
 			}
 			defs.add(tree);
@@ -78,7 +107,7 @@ public class AstEditor {
 		// TODO: also remove from imports
 	}
 
-	public void removeImport(final Class<?> clazz) {
+	public void removeImports(final Class<?> clazz) {
 		final List<JCTree> defs = new ArrayList<JCTree>();
 		for (final JCTree tree : unit.defs) {
 			if (tree instanceof JCImport) {
@@ -99,5 +128,11 @@ public class AstEditor {
 
 	public void setModified(boolean modified) {
 		this.modified = modified;
+	}
+
+	public static JCImport rename(final Context context, final JCImport src, final Name newname) {
+		final JCImport copy = Utils.copyTree(context, src);
+		((JCFieldAccess) copy.qualid).name = newname;
+		return copy;
 	}
 }
