@@ -46,7 +46,7 @@ public class Array<T> {
 }
 ```
 
-compiles to the three classes (by running `javac -cp specialize-java.jar Array.java` or `mvn compile` if you have pom.xml):
+compiles to the following 3 classes (by running `javac -cp specialize-java.jar Array.java` or `mvn compile` if you have pom.xml):
 
 ```java
 public class Array$specialized$int {
